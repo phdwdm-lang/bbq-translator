@@ -1,0 +1,110 @@
+appId: com.mangatrans.studio
+productName: MangaTrans Studio
+copyright: Copyright © 2026
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - "electron/**/*"
+  - "!electron/**/*.map"
+
+extraResources:
+  - from: ".next/standalone"
+    to: "standalone"
+    filter:
+      - "**/*"
+  - from: "build/standalone_node_modules"
+    to: "standalone/node_modules"
+    filter:
+      - "**/*"
+  - from: ".next/static"
+    to: "standalone/.next/static"
+    filter:
+      - "**/*"
+  - from: "public"
+    to: "standalone/public"
+    filter:
+      - "**/*"
+  # Backend (CPU-lite: ~150 MB after filtering)
+  - from: "../manga-backend"
+    to: "backend"
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+      - "!**/*.pyo"
+      - "!.git/**"
+      - "!.github/**"
+      - "!.windsurf/**"
+      - "!raw/**"
+      - "!raw-translated/**"
+      - "!logs/**"
+      - "!test/**"
+      - "!training/**"
+      - "!demo/**"
+      - "!docs/**"
+      - "!devscripts/**"
+      - "!front/**"
+      - "!src/**"
+      - "!MangaStudio_Data/**"
+      - "!pip-modules/**"
+      - "!examples/**"
+      - "!*.md"
+      - "!.gitignore"
+      - "!.dockerignore"
+      - "!Dockerfile"
+      - "!docker-compose*.yml"
+      - "!Makefile"
+      - "!pytest.ini"
+      - "!setup.cfg"
+      - "!pyproject.toml"
+      - "!run-as-kaggle.ipynb"
+      - "!run_as_colab.ipynb"
+      - "!*.bat"
+      - "!*.sh"
+      - "!venv/**"
+      - "!.venv/**"
+      - "!node_modules/**"
+      - "!**/*.egg-info/**"
+      - "!config.json"
+      - "!models/**"
+      - "!**/*.whl"
+      - "!.env"
+      - "!server/**"
+      - "!requirements.txt"
+      - "!requirements-cpu.txt"
+      - "!requirements-dev.txt"
+      - "!requirements.lock.txt"
+  # Embedded Python (built via scripts/build_embedded_python.ps1)
+  - from: "build/python"
+    to: "python"
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: zip
+      arch:
+        - x64
+  icon: build/icon.ico
+  forceCodeSigning: false
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  deleteAppDataOnUninstall: false
+  artifactName: "${productName}-Setup-${version}.${ext}"
+  shortcutName: MangaTrans Studio
+  installerLanguages:
+    - zh_CN
+    - en_US
+
+asar: true
+
+compression: normal
