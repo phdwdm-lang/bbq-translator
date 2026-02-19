@@ -1,4 +1,12 @@
 import type { EditorRegion } from "../types/editor";
+import {
+  DIRECTION_AUTO,
+  DIRECTION_HORIZONTAL,
+  DIRECTION_HORIZONTAL_VALUES,
+  DIRECTION_VERTICAL,
+  DIRECTION_VERTICAL_RATIO,
+  DIRECTION_VERTICAL_VALUES,
+} from "../constants/editor";
 
 export function debounce<A extends unknown[]>(fn: (...args: A) => unknown, delay: number): (...args: A) => void {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -30,6 +38,24 @@ export function getCacheKey(region: EditorRegion): string {
     strokeColor: region.strokeColor,
     strokeWidth: region.strokeWidth,
   });
+}
+
+export function normalizeDirection(rawDirection?: string, box?: [number, number, number, number]): string {
+  const normalized = String(rawDirection ?? "").trim().toLowerCase();
+  if (!normalized || normalized === DIRECTION_AUTO) {
+    if (box) {
+      const [, , width, height] = box;
+      return height > width * DIRECTION_VERTICAL_RATIO ? DIRECTION_VERTICAL : DIRECTION_HORIZONTAL;
+    }
+    return DIRECTION_HORIZONTAL;
+  }
+  if (DIRECTION_VERTICAL_VALUES.includes(normalized as (typeof DIRECTION_VERTICAL_VALUES)[number])) {
+    return DIRECTION_VERTICAL;
+  }
+  if (DIRECTION_HORIZONTAL_VALUES.includes(normalized as (typeof DIRECTION_HORIZONTAL_VALUES)[number])) {
+    return DIRECTION_HORIZONTAL;
+  }
+  return DIRECTION_HORIZONTAL;
 }
 
 export function getContrastingStrokeColor(fill: string): string {

@@ -51,6 +51,91 @@ function buildTextDecoration(underline: boolean, strikethrough: boolean): string
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
+interface BatchTextFormattingToolbarProps {
+  selectedIds: string[];
+  selectedRegion: EditorRegion;
+  onBatchRegionChange: (ids: string[], patch: Partial<EditorRegion>) => void;
+}
+
+export function BatchTextFormattingToolbar({ selectedIds, selectedRegion, onBatchRegionChange }: BatchTextFormattingToolbarProps) {
+  const { bold, italic } = parseFontStyle(selectedRegion.fontStyle);
+  const { underline, strikethrough } = parseTextDecoration(selectedRegion.textDecoration);
+  const currentAlign = (selectedRegion.align || "left") as AlignValue;
+
+  const toggleBold = () => {
+    onBatchRegionChange(selectedIds, { fontStyle: buildFontStyle(!bold, italic) });
+  };
+
+  const toggleItalic = () => {
+    onBatchRegionChange(selectedIds, { fontStyle: buildFontStyle(bold, !italic) });
+  };
+
+  const toggleUnderline = () => {
+    onBatchRegionChange(selectedIds, { textDecoration: buildTextDecoration(!underline, strikethrough) });
+  };
+
+  const toggleStrikethrough = () => {
+    onBatchRegionChange(selectedIds, { textDecoration: buildTextDecoration(underline, !strikethrough) });
+  };
+
+  const setAlign = (align: AlignValue) => {
+    onBatchRegionChange(selectedIds, { align });
+  };
+
+  return (
+    <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className={bold ? FORMAT_BUTTON_ACTIVE : FORMAT_BUTTON_INACTIVE}
+          onClick={(e) => { e.stopPropagation(); toggleBold(); }}
+          title="加粗"
+        >
+          <Bold className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className={italic ? FORMAT_BUTTON_ACTIVE : FORMAT_BUTTON_INACTIVE}
+          onClick={(e) => { e.stopPropagation(); toggleItalic(); }}
+          title="斜体"
+        >
+          <Italic className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className={underline ? FORMAT_BUTTON_ACTIVE : FORMAT_BUTTON_INACTIVE}
+          onClick={(e) => { e.stopPropagation(); toggleUnderline(); }}
+          title="下划线"
+        >
+          <Underline className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className={strikethrough ? FORMAT_BUTTON_ACTIVE : FORMAT_BUTTON_INACTIVE}
+          onClick={(e) => { e.stopPropagation(); toggleStrikethrough(); }}
+          title="删除线"
+        >
+          <Strikethrough className="w-4 h-4" />
+        </button>
+
+        <div className="w-px h-5 bg-slate-200 mx-1" />
+
+        {ALIGN_OPTIONS.map(({ value, icon: Icon, title }) => (
+          <button
+            key={value}
+            type="button"
+            className={currentAlign === value ? FORMAT_BUTTON_ACTIVE : FORMAT_BUTTON_INACTIVE}
+            onClick={(e) => { e.stopPropagation(); setAlign(value); }}
+            title={title}
+          >
+            <Icon className="w-4 h-4" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function TextFormattingToolbar({ region, onRegionChange }: TextFormattingToolbarProps) {
   const { bold, italic } = parseFontStyle(region.fontStyle);
   const { underline, strikethrough } = parseTextDecoration(region.textDecoration);

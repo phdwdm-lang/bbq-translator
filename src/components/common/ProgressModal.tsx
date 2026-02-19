@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { isTranslationStageFinished, TRANSLATION_STAGE_CANCELED } from "../../lib/translationProgress";
 
 interface ProgressModalProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface ProgressModalProps {
   totalCount?: number;
   onCancel: () => void;
   onClose: () => void;
+  onBackground?: () => void;
 }
 
 type ResultStatus = "all_success" | "partial_success" | "all_failed";
@@ -39,11 +41,12 @@ export function ProgressModal({
   totalCount = 0,
   onCancel,
   onClose,
+  onBackground,
 }: ProgressModalProps) {
   if (!open) return null;
 
   const clampedValue = Math.max(0, Math.min(100, progressValue));
-  const isFinished = stage === "完成" || stage === "失败" || stage === "已取消";
+  const isFinished = isTranslationStageFinished(stage);
   const showResult = isFinished && totalCount > 0;
 
   const getResultStatus = (): ResultStatus => {
@@ -79,7 +82,7 @@ export function ProgressModal({
             )}
           </div>
 
-          {error && stage !== "已取消" && (
+          {error && stage !== TRANSLATION_STAGE_CANCELED && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 text-left">{error}</div>
           )}
 
@@ -119,11 +122,13 @@ export function ProgressModal({
             取消
           </button>
           <div className="flex items-center gap-2">
-            <button type="button" className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" onClick={onClose}>
-              后台继续
-            </button>
+            {!isFinished && onBackground && (
+              <button type="button" className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" onClick={onBackground}>
+                后台继续
+              </button>
+            )}
             <button type="button" className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors" onClick={onClose}>
-              关闭
+              {isFinished ? "关闭" : "关闭"}
             </button>
           </div>
         </div>

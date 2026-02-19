@@ -5,6 +5,23 @@
 export const DETECTION_RESOLUTION = 1536;
 export const INPAINTING_SIZE = 2048;
 
+export const DIRECTION_AUTO = "auto";
+export const DIRECTION_VERTICAL = "vertical";
+export const DIRECTION_HORIZONTAL = "horizontal";
+export const BACKEND_DIRECTION_VERTICAL = "v";
+export const BACKEND_DIRECTION_VERTICAL_ALT = "vr";
+export const BACKEND_DIRECTION_HORIZONTAL = "h";
+export const DIRECTION_VERTICAL_RATIO = 1.35;
+export const DIRECTION_VERTICAL_VALUES = [
+  DIRECTION_VERTICAL,
+  BACKEND_DIRECTION_VERTICAL,
+  BACKEND_DIRECTION_VERTICAL_ALT,
+] as const;
+export const DIRECTION_HORIZONTAL_VALUES = [
+  DIRECTION_HORIZONTAL,
+  BACKEND_DIRECTION_HORIZONTAL,
+] as const;
+
 export const FONT_SIZE_PRESETS = [
   12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48, 56, 64, 72,
 ] as const;

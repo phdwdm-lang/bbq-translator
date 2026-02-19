@@ -3,7 +3,7 @@
  * 统一 EditorRegion 等类型，避免多处重复定义
  */
 
-export type EditorTool = "select" | "ocr_region" | "inpaint_region";
+export type EditorTool = "pan" | "select" | "ocr_region" | "inpaint_region";
 
 export interface DrawingRect {
   x: number;

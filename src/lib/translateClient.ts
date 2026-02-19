@@ -1,6 +1,60 @@
 import type { TextRegion } from "./storage";
-import { API_BASE } from "./env";
+import { getBackendUrl } from "./env";
 import { loadCredentialHeaders } from "../constants/credentials";
+
+export interface MissingApiKeyError extends Error {
+  isMissingApiKey: true;
+  provider: string;
+}
+
+export function isMissingApiKeyError(err: unknown): err is MissingApiKeyError {
+  return err instanceof Error && (err as MissingApiKeyError).isMissingApiKey === true;
+}
+
+const API_KEY_ERROR_CODE = "missing_api_key";
+const DEFAULT_MISSING_API_KEY_MESSAGE = "API Key 缺失或无效";
+const UNKNOWN_PROVIDER = "unknown";
+const API_KEY_ERROR_STATUS_CODES = new Set([401, 403, 429]);
+
+function toRecord(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") return null;
+  return payload as Record<string, unknown>;
+}
+
+function resolveErrorMessage(payload: unknown, fallback: string): string {
+  const record = toRecord(payload);
+  const message = typeof record?.message === "string" ? record.message.trim() : "";
+  if (message) return message;
+  const detail = typeof record?.detail === "string" ? record.detail.trim() : "";
+  return detail || fallback;
+}
+
+function resolveErrorProvider(payload: unknown): string {
+  const record = toRecord(payload);
+  const provider = typeof record?.provider === "string" ? record.provider.trim() : "";
+  return provider || UNKNOWN_PROVIDER;
+}
+
+function buildMissingApiKeyError(message: string, provider: string): MissingApiKeyError {
+  const err = new Error(message || DEFAULT_MISSING_API_KEY_MESSAGE) as MissingApiKeyError;
+  err.isMissingApiKey = true;
+  err.provider = provider || UNKNOWN_PROVIDER;
+  return err;
+}
+
+function resolveMissingApiKeyError(
+  payload: unknown,
+  response?: Response,
+  fallbackMessage: string = DEFAULT_MISSING_API_KEY_MESSAGE,
+): MissingApiKeyError | null {
+  const record = toRecord(payload);
+  const errorCode = typeof record?.error_code === "string" ? record.error_code : "";
+  const shouldHandle = errorCode === API_KEY_ERROR_CODE
+    || (response ? API_KEY_ERROR_STATUS_CODES.has(response.status) : false);
+  if (!shouldHandle) return null;
+  const message = resolveErrorMessage(payload, fallbackMessage);
+  return buildMissingApiKeyError(message, resolveErrorProvider(payload));
+}
 
 export type ScanResult = {
   regions: TextRegion[];
@@ -36,7 +90,7 @@ export async function probeLang(params: {
   if (params.detector) formData.append("detector", params.detector);
   if (typeof params.detectionSize === "number") formData.append("detection_size", String(params.detectionSize));
 
-  const res = await fetch(`${API_BASE}/probe_lang`, {
+  const res = await fetch(`${getBackendUrl()}/probe_lang`, {
     method: "POST",
     body: formData,
     signal: params.signal,
@@ -71,7 +125,7 @@ export async function renderMangaPage(params: {
   if (typeof params.lineSpacing === "number") formData.append("line_spacing", String(params.lineSpacing));
   if (params.disableFontBorder) formData.append("disable_font_border", "1");
 
-  const res = await fetch(`${API_BASE}/render_page`, {
+  const res = await fetch(`${getBackendUrl()}/render_page`, {
     method: "POST",
     body: formData,
     headers: loadCredentialHeaders(),
@@ -83,13 +137,16 @@ export async function renderMangaPage(params: {
   const data = isJson ? await res.json().catch(() => null) : null;
   const text = !isJson ? await res.text().catch(() => "") : "";
 
+  const missingApiKeyError = resolveMissingApiKeyError(data, res);
+  if (missingApiKeyError) throw missingApiKeyError;
+
   if (!res.ok) {
-    const detail = data?.message || data?.detail || text || res.statusText;
+    const detail = resolveErrorMessage(data, text || res.statusText);
     throw new Error(`Render page failed (${res.status}): ${detail}`);
   }
 
   if (!data || data.status !== "success") {
-    const detail = data?.message || data?.detail || "unknown";
+    const detail = resolveErrorMessage(data, "unknown");
     throw new Error(`Render page failed: ${detail}`);
   }
 
@@ -123,16 +180,19 @@ export async function scanMangaImage(params: {
   if (params.targetLang) formData.append("target_lang", params.targetLang);
   if (params.ocr) formData.append("ocr", params.ocr);
 
-  const res = await fetch(`${API_BASE}/scan`, {
+  const res = await fetch(`${getBackendUrl()}/scan`, {
     method: "POST",
     body: formData,
     headers: loadCredentialHeaders(),
     signal: params.signal,
   });
 
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
+  const missingApiKeyError = resolveMissingApiKeyError(data, res);
+  if (missingApiKeyError) throw missingApiKeyError;
   if (!data || data.status !== "success") {
-    throw new Error(data?.message || "Scan failed");
+    const message = resolveErrorMessage(data, "Scan failed");
+    throw new Error(message);
   }
 
   return {
@@ -150,7 +210,7 @@ export async function convertMobiToEpub(params: { file: File; signal?: AbortSign
   const formData = new FormData();
   formData.append("file", params.file);
 
-  const res = await fetch(`${API_BASE}/convert_mobi_to_epub`, {
+  const res = await fetch(`${getBackendUrl()}/convert_mobi_to_epub`, {
     method: "POST",
     body: formData,
     signal: params.signal,
@@ -172,7 +232,7 @@ export async function convertRarToZip(params: { file: File; signal?: AbortSignal
   const formData = new FormData();
   formData.append("file", params.file);
 
-  const res = await fetch(`${API_BASE}/convert_rar_to_zip`, {
+  const res = await fetch(`${getBackendUrl()}/convert_rar_to_zip`, {
     method: "POST",
     body: formData,
     signal: params.signal,
@@ -223,7 +283,7 @@ export type ResultPages = {
 export async function listResults(params?: { limit?: number; signal?: AbortSignal }): Promise<ResultListItem[]> {
   const requestedLimit = typeof params?.limit === "number" ? params.limit : undefined;
   const qs = typeof requestedLimit === "number" ? `?limit=${encodeURIComponent(String(requestedLimit))}` : "";
-  const res = await fetch(`${API_BASE}/results/list${qs}`, { method: "GET", signal: params?.signal });
+  const res = await fetch(`${getBackendUrl()}/results/list${qs}`, { method: "GET", signal: params?.signal });
   const data = await res.json();
   const items = (data?.items ?? []) as ResultListItem[];
   if (typeof requestedLimit === "number") return items.slice(0, requestedLimit);
@@ -231,7 +291,7 @@ export async function listResults(params?: { limit?: number; signal?: AbortSigna
 }
 
 export function resultFileUrl(task: string, filename: string): string {
-  return `${API_BASE}/results/file/${encodeURIComponent(task)}/${encodeURIComponent(filename)}`;
+  return `${getBackendUrl()}/results/file/${encodeURIComponent(task)}/${encodeURIComponent(filename)}`;
 }
 
 export async function uploadResultImage(params: {
@@ -247,7 +307,7 @@ export async function uploadResultImage(params: {
   if (params.displayTitle) formData.append("display_title", params.displayTitle);
   formData.append("file", new File([params.blob], params.filename));
 
-  const res = await fetch(`${API_BASE}/results/upload_image`, {
+  const res = await fetch(`${getBackendUrl()}/results/upload_image`, {
     method: "POST",
     body: formData,
     signal: params.signal,
@@ -260,7 +320,7 @@ export async function uploadResultImage(params: {
 }
 
 export async function deleteResultTask(params: { task: string; signal?: AbortSignal }): Promise<{ status: string; task: string }> {
-  const res = await fetch(`${API_BASE}/results/task/${encodeURIComponent(params.task)}`, {
+  const res = await fetch(`${getBackendUrl()}/results/task/${encodeURIComponent(params.task)}`, {
     method: "DELETE",
     signal: params.signal,
   });
@@ -288,7 +348,7 @@ export async function deleteResultTask(params: { task: string; signal?: AbortSig
 }
 
 export async function listResultPages(params: { task: string; signal?: AbortSignal }): Promise<ResultPages> {
-  const res = await fetch(`${API_BASE}/results/pages/${encodeURIComponent(params.task)}`, {
+  const res = await fetch(`${getBackendUrl()}/results/pages/${encodeURIComponent(params.task)}`, {
     method: "GET",
     signal: params.signal,
   });
@@ -353,7 +413,7 @@ export type ExtensionItem = {
 };
 
 export async function listExtensions(params?: { signal?: AbortSignal }): Promise<ExtensionItem[]> {
-  const res = await fetch(`${API_BASE}/extensions/list`, { method: "GET", signal: params?.signal });
+  const res = await fetch(`${getBackendUrl()}/extensions/list`, { method: "GET", signal: params?.signal });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.status !== "ok") {
     throw new Error(data?.message || data?.detail || "List extensions failed");
@@ -365,7 +425,7 @@ export async function listExtensions(params?: { signal?: AbortSignal }): Promise
 export async function installExtension(params: { id: string; signal?: AbortSignal }): Promise<{ id: string; download_started: boolean }> {
   const formData = new FormData();
   formData.append("id", params.id);
-  const res = await fetch(`${API_BASE}/extensions/install`, { method: "POST", body: formData, signal: params.signal });
+  const res = await fetch(`${getBackendUrl()}/extensions/install`, { method: "POST", body: formData, signal: params.signal });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.status !== "ok") {
     throw new Error(data?.message || data?.detail || "Install extension failed");
@@ -384,7 +444,7 @@ export async function importExtensionZip(params: {
   const formData = new FormData();
   formData.append("id", params.id);
   formData.append("file", params.file);
-  const res = await fetch(`${API_BASE}/extensions/import`, { method: "POST", body: formData, signal: params.signal });
+  const res = await fetch(`${getBackendUrl()}/extensions/import`, { method: "POST", body: formData, signal: params.signal });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.status !== "ok") {
     throw new Error(data?.message || data?.detail || "Import extension zip failed");
@@ -398,7 +458,7 @@ export async function importExtensionWhl(params: { id: string; files: File[]; si
   for (const f of params.files) {
     formData.append("file", f);
   }
-  const res = await fetch(`${API_BASE}/extensions/import`, { method: "POST", body: formData, signal: params.signal });
+  const res = await fetch(`${getBackendUrl()}/extensions/import`, { method: "POST", body: formData, signal: params.signal });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.status !== "ok") {
     throw new Error(data?.message || data?.detail || "Import extension whl failed");
@@ -408,7 +468,7 @@ export async function importExtensionWhl(params: { id: string; files: File[]; si
 
 export async function restartBackend(params?: { signal?: AbortSignal }): Promise<void> {
   try {
-    await fetch(`${API_BASE}/restart`, { method: "POST", signal: params?.signal });
+    await fetch(`${getBackendUrl()}/restart`, { method: "POST", signal: params?.signal });
   } catch {
     // Server may have already exited before responding
   }
@@ -417,7 +477,7 @@ export async function restartBackend(params?: { signal?: AbortSignal }): Promise
 export async function uninstallExtension(params: { id: string; signal?: AbortSignal }): Promise<{ id: string }> {
   const formData = new FormData();
   formData.append("id", params.id);
-  const res = await fetch(`${API_BASE}/extensions/uninstall`, { method: "POST", body: formData, signal: params.signal });
+  const res = await fetch(`${getBackendUrl()}/extensions/uninstall`, { method: "POST", body: formData, signal: params.signal });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.status !== "ok") {
     throw new Error(data?.message || data?.detail || "Uninstall extension failed");
@@ -426,7 +486,7 @@ export async function uninstallExtension(params: { id: string; signal?: AbortSig
 }
 
 export async function getMocrStatus(params?: { signal?: AbortSignal }): Promise<MocrStatus> {
-  const res = await fetch(`${API_BASE}/mocr/status`, { method: "GET", signal: params?.signal });
+  const res = await fetch(`${getBackendUrl()}/mocr/status`, { method: "GET", signal: params?.signal });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data) {
     throw new Error("Fetch mocr status failed");
@@ -459,7 +519,7 @@ export async function verifyApiKey(params: {
   if (params.apiBase) formData.append("api_base", params.apiBase);
   if (params.model) formData.append("model", params.model);
 
-  const res = await fetch(`${API_BASE}/verify_api_key`, {
+  const res = await fetch(`${getBackendUrl()}/verify_api_key`, {
     method: "POST",
     body: formData,
     signal: params.signal,
@@ -480,7 +540,7 @@ export async function importMocrOfflineZip(params: { file: File; signal?: AbortS
   const formData = new FormData();
   formData.append("file", params.file);
 
-  const res = await fetch(`${API_BASE}/mocr/import`, {
+  const res = await fetch(`${getBackendUrl()}/mocr/import`, {
     method: "POST",
     body: formData,
     signal: params.signal,

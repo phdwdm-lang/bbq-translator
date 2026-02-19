@@ -1,5 +1,5 @@
 import { putBlob } from "./blobDb";
-import { resolveImageToBlob, scanMangaImage } from "./translateClient";
+import { resolveImageToBlob, scanMangaImage, isMissingApiKeyError } from "./translateClient";
 import {
   addPageToChapter,
   loadJobs,
@@ -67,21 +67,29 @@ export async function runBatchJob(jobId: string, files: File[]) {
       setJobItem(jobId, i, { status: "running" });
 
       const blobDir = `${job.targetBookId}/${job.targetChapterId}`;
-      const originalKey = await putBlob(f, { dir: blobDir, name: f.name });
-      setJobItem(jobId, i, { originalBlobKey: originalKey });
 
-      const scan = await scanMangaImage({
-        file: f,
-        lang: job.lang,
-        inpainter: job.inpainter ?? "lama_mpe",
-        detector: job.detector,
-        detectionSize: job.detectionSize,
-        inpaintingSize: job.inpaintingSize,
-        translator: job.translator,
-        targetLang: job.targetLang ?? "CHS",
-        ocr: job.ocr,
-        signal: aborter.signal,
-      });
+      let scan;
+      try {
+        scan = await scanMangaImage({
+          file: f,
+          lang: job.lang,
+          inpainter: job.inpainter ?? "lama_mpe",
+          detector: job.detector,
+          detectionSize: job.detectionSize,
+          inpaintingSize: job.inpaintingSize,
+          translator: job.translator,
+          targetLang: job.targetLang ?? "CHS",
+          ocr: job.ocr,
+          signal: aborter.signal,
+        });
+      } catch (scanErr: unknown) {
+        if (isMissingApiKeyError(scanErr)) {
+          throw new Error("API Key 缺失或无效，请在设置 → 账号中检查配置或额度");
+        }
+        throw scanErr;
+      }
+
+      const originalKey = await putBlob(f, { dir: blobDir, name: f.name });
 
       let translatedBlobKey: string | undefined;
       let translatedUrl: string | undefined;
@@ -104,7 +112,7 @@ export async function runBatchJob(jobId: string, files: File[]) {
         translatedUrl,
       });
 
-      setJobItem(jobId, i, { status: "success" });
+      setJobItem(jobId, i, { status: "success", originalBlobKey: originalKey });
       setJobProgress(jobId, { completed: i + 1 });
     }
 

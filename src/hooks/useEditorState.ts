@@ -9,6 +9,7 @@ export function useEditorState() {
   const [editorRegions, setEditorRegions] = useState<EditorRegion[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editorImgNatural, setEditorImgNatural] = useState<[number, number] | null>(null);
   const [editorScale, setEditorScale] = useState<number>(1);
   const [editorProjectError, setEditorProjectError] = useState<string>("");
@@ -17,7 +18,7 @@ export function useEditorState() {
   const [editorSaveProgress, setEditorSaveProgress] = useState<string>("");
   const [editorUseBackendPreview, setEditorUseBackendPreview] = useState<boolean>(false);
   const [editorDirtyRegionIds, setEditorDirtyRegionIds] = useState<Set<string>>(() => new Set());
-  const [editorActiveTool, setEditorActiveTool] = useState<EditorTool>("select");
+  const [editorActiveTool, setEditorActiveTool] = useState<EditorTool>("pan");
 
   const editorWrapRef = useRef<HTMLDivElement | null>(null);
   const editorCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -50,6 +51,8 @@ export function useEditorState() {
     setEditingId,
     editingValue,
     setEditingValue,
+    selectedIds,
+    setSelectedIds,
     editorImgNatural,
     setEditorImgNatural,
     editorScale,

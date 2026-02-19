@@ -5,14 +5,16 @@ import { Stage, Layer, Image as KonvaImage, Rect } from "react-konva";
 import useImage from "use-image";
 import Konva from "konva";
 import type { EditorTool, DrawingRect } from "../../types/editor";
-import { ScanText, Eraser, MousePointer2, ZoomIn, ZoomOut, Maximize, Layers } from "lucide-react";
+import { ScanText, Eraser, MousePointer2, Hand, ZoomIn, ZoomOut, Maximize, Layers } from "lucide-react";
 import { RegionGroup } from "./RegionGroup";
 
 interface EditorWorkspaceProps {
   imageUrl: string | null;
   regions: import("../../types/editor").EditorRegion[];
   selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  selectedIds: string[];
+  onSelect: (id: string | null, options?: { ctrlKey?: boolean }) => void;
+  onSelectMultiple: (ids: string[]) => void;
   onChangeRegion: (id: string, newBox: [number, number, number, number], newText: string) => void;
   scale: number;
   setScale: (s: number) => void;
@@ -37,7 +39,9 @@ export function EditorWorkspace({
   imageUrl,
   regions,
   selectedId,
+  selectedIds,
   onSelect,
+  onSelectMultiple,
   onChangeRegion,
   scale,
   setScale,
@@ -59,8 +63,33 @@ export function EditorWorkspace({
   const [drawingRect, setDrawingRect] = useState<DrawingRect | null>(null);
   const [toolProcessing, setToolProcessing] = useState(false);
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Middle mouse button dragging state
+  const [isMiddleDragging, setIsMiddleDragging] = useState(false);
+  const middleDragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
+  
+  // Selection box state for multi-select
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<DrawingRect | null>(null);
+  const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const isToolMode = activeTool === "ocr_region" || activeTool === "inpaint_region";
+  const isPanMode = activeTool === "pan";
+  const isSelectMode = activeTool === "select";
+  
+  // Ctrl+A handler for select all
+  useEffect(() => {
+    if (!isSelectMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        e.preventDefault();
+        const allIds = regions.map((r) => r.id);
+        onSelectMultiple(allIds);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSelectMode, regions, onSelectMultiple]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -103,8 +132,122 @@ export function EditorWorkspace({
     setPosition(newPos);
   };
 
+  // Middle mouse button drag handlers
+  const handleMiddleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (e.evt.button !== 1) return; // Only middle button
+    e.evt.preventDefault();
+    const stage = stageRef.current;
+    if (!stage) return;
+    
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    
+    setIsMiddleDragging(true);
+    middleDragStartRef.current = {
+      x: pointer.x,
+      y: pointer.y,
+      posX: position.x,
+      posY: position.y,
+    };
+  };
+
+  const handleMiddleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!isMiddleDragging || !middleDragStartRef.current) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    
+    const dx = pointer.x - middleDragStartRef.current.x;
+    const dy = pointer.y - middleDragStartRef.current.y;
+    
+    setPosition({
+      x: middleDragStartRef.current.posX + dx,
+      y: middleDragStartRef.current.posY + dy,
+    });
+  };
+
+  const handleMiddleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (e.evt.button === 1) {
+      setIsMiddleDragging(false);
+      middleDragStartRef.current = null;
+    }
+  };
+
+  // Selection box handlers for multi-select
+  const handleSelectionMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (e.evt.button !== 0) return;
+    if (!isSelectMode) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    
+    const imageX = (pointer.x - stage.x()) / stage.scaleX();
+    const imageY = (pointer.y - stage.y()) / stage.scaleY();
+    
+    selectionStartRef.current = { x: imageX, y: imageY };
+    setIsSelecting(true);
+    setSelectionRect({ x: imageX, y: imageY, width: 0, height: 0 });
+  };
+
+  const handleSelectionMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!isSelecting || !selectionStartRef.current) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    
+    const imageX = (pointer.x - stage.x()) / stage.scaleX();
+    const imageY = (pointer.y - stage.y()) / stage.scaleY();
+    
+    const startX = selectionStartRef.current.x;
+    const startY = selectionStartRef.current.y;
+    
+    setSelectionRect({
+      x: Math.min(startX, imageX),
+      y: Math.min(startY, imageY),
+      width: Math.abs(imageX - startX),
+      height: Math.abs(imageY - startY),
+    });
+  };
+
+  const handleSelectionMouseUp = () => {
+    if (!isSelecting || !selectionRect) {
+      setIsSelecting(false);
+      selectionStartRef.current = null;
+      return;
+    }
+    
+    setIsSelecting(false);
+    selectionStartRef.current = null;
+    
+    // Find regions that intersect with selection rectangle
+    if (selectionRect.width > 5 && selectionRect.height > 5) {
+      const selectedRegionIds = regions.filter((r) => {
+        const [rx, ry, rw, rh] = r.box;
+        // Check if region intersects with selection rect
+        return !(rx + rw < selectionRect.x || 
+                 rx > selectionRect.x + selectionRect.width ||
+                 ry + rh < selectionRect.y || 
+                 ry > selectionRect.y + selectionRect.height);
+      }).map((r) => r.id);
+      
+      if (selectedRegionIds.length > 0) {
+        onSelectMultiple(selectedRegionIds);
+      }
+    }
+    
+    setSelectionRect(null);
+  };
+
   // Tool drawing handlers
   const handleToolMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Skip if middle button or right button
+    if (e.evt.button !== 0) return;
     if (!isToolMode || toolProcessing) return;
     const stage = stageRef.current;
     if (!stage) return;
@@ -183,7 +326,7 @@ export function EditorWorkspace({
         <Stage
           width={size.width}
           height={size.height}
-          draggable={!isToolMode}
+          draggable={isPanMode || (!isToolMode && !isSelectMode)}
           onWheel={handleWheel}
           scaleX={scale}
           scaleY={scale}
@@ -195,8 +338,28 @@ export function EditorWorkspace({
             }
           }}
           onMouseDown={(e) => {
+            // Handle middle mouse button for panning
+            if (e.evt.button === 1) {
+              handleMiddleMouseDown(e);
+              return;
+            }
             if (isToolMode) {
               handleToolMouseDown(e);
+              return;
+            }
+            // Handle selection mode - start selection box on empty area or image
+            if (isSelectMode) {
+              // Allow starting selection on Stage or Image (but not on RegionGroup)
+              const targetName = e.target.name?.() || "";
+              const clickedOnRegion = targetName.startsWith("region-");
+              const clickedOnStageOrImage = e.target === e.target.getStage() || e.target.getClassName?.() === "Image";
+              if (clickedOnStageOrImage || !clickedOnRegion) {
+                if (!e.evt.ctrlKey && !e.evt.metaKey) {
+                  // Clear selection and start box selection
+                  onSelectMultiple([]);
+                }
+                handleSelectionMouseDown(e);
+              }
               return;
             }
             const clickedOnEmpty = e.target === e.target.getStage();
@@ -204,11 +367,46 @@ export function EditorWorkspace({
               onSelect(null);
             }
           }}
-          onMouseMove={isToolMode ? handleToolMouseMove : undefined}
-          onMouseUp={isToolMode ? handleToolMouseUp : undefined}
-          onMouseLeave={isToolMode ? handleToolMouseUp : undefined}
+          onMouseMove={(e) => {
+            if (isMiddleDragging) {
+              handleMiddleMouseMove(e);
+              return;
+            }
+            if (isSelecting) {
+              handleSelectionMouseMove(e);
+              return;
+            }
+            if (isToolMode) {
+              handleToolMouseMove(e);
+            }
+          }}
+          onMouseUp={(e) => {
+            if (e.evt.button === 1) {
+              handleMiddleMouseUp(e);
+              return;
+            }
+            if (isSelecting) {
+              handleSelectionMouseUp();
+              return;
+            }
+            if (isToolMode) {
+              handleToolMouseUp();
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (isSelecting) {
+              handleSelectionMouseUp();
+            }
+            if (isMiddleDragging) {
+              setIsMiddleDragging(false);
+              middleDragStartRef.current = null;
+            }
+            if (isToolMode) {
+              handleToolMouseUp();
+            }
+          }}
           ref={stageRef}
-          className={isToolMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}
+          className={isMiddleDragging ? "cursor-grabbing" : isPanMode ? "cursor-grab active:cursor-grabbing" : isToolMode ? "cursor-crosshair" : isSelectMode ? "cursor-default" : "cursor-default"}
         >
           <Layer>
             <URLImage src={imageUrl} />
@@ -220,7 +418,7 @@ export function EditorWorkspace({
               <RegionGroup
                 key={r.id}
                 region={r}
-                isSelected={selectedId === r.id}
+                isSelected={selectedId === r.id || selectedIds.includes(r.id)}
                 onSelect={onSelect}
                 onChange={onChangeRegion}
                 scale={scale}
@@ -241,6 +439,20 @@ export function EditorWorkspace({
                 listening={false}
               />
             )}
+            {/* Selection rectangle for multi-select */}
+            {selectionRect && (
+              <Rect
+                x={selectionRect.x}
+                y={selectionRect.y}
+                width={selectionRect.width}
+                height={selectionRect.height}
+                fill="rgba(99, 102, 241, 0.15)"
+                stroke="#6366f1"
+                strokeWidth={1 / scale}
+                dash={[4 / scale, 2 / scale]}
+                listening={false}
+              />
+            )}
           </Layer>
         </Stage>
       ) : null}
@@ -250,6 +462,18 @@ export function EditorWorkspace({
         {/* Drawing Tools Group */}
         {onToolChange && (
           <>
+            <button
+              className={`p-2 rounded-lg transition-all ${
+                activeTool === "pan"
+                  ? "text-indigo-600 bg-indigo-50"
+                  : "text-slate-500 hover:bg-slate-100"
+              }`}
+              onClick={() => onToolChange("pan")}
+              title="拖动工具"
+              disabled={toolProcessing}
+            >
+              <Hand className="w-4 h-4" />
+            </button>
             <button
               className={`p-2 rounded-lg transition-all ${
                 activeTool === "select"

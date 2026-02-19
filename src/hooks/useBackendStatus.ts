@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_BASE, IS_ELECTRON } from "../lib/env";
+import { IS_ELECTRON, initBackendUrl, getBackendUrl } from "../lib/env";
 
 export type BackendStatus = "connected" | "disconnected" | "crashed" | "restarting" | "starting";
 
@@ -18,7 +18,7 @@ export function useBackendStatus() {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), POLL_TIMEOUT_MS);
-      const res = await fetch(`${API_BASE}/health`, {
+      const res = await fetch(`${getBackendUrl()}/health`, {
         method: "GET",
         signal: controller.signal,
       });
@@ -66,8 +66,15 @@ export function useBackendStatus() {
   }, [checkHealth]);
 
   useEffect(() => {
-    void checkHealth();
-    rebuildTimer();
+    // Initialize backend URL first (fetches dynamic port in Electron packaged mode)
+    const init = async () => {
+      if (IS_ELECTRON) {
+        await initBackendUrl();
+      }
+      void checkHealth();
+      rebuildTimer();
+    };
+    void init();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };

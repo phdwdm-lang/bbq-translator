@@ -14,6 +14,7 @@
 param(
     [switch]$SkipPython,
     [switch]$SkipFrontend,
+    [switch]$SkipModels,
     [switch]$SkipPackage
 )
 
@@ -64,7 +65,43 @@ if (-not $SkipPython) {
     Write-Host "[$stepNum] Skipping Python build" -ForegroundColor Yellow
 }
 
-# ── Step 3: Package with electron-builder ──
+# ── Step 3: Download Core Models ──
+$stepNum++
+$modelsDir = Join-Path $ProjectRoot "build\bundled-models"
+if (-not $SkipModels) {
+    if (Test-Path $modelsDir) {
+        # Check if all models exist
+        $requiredModels = @(
+            "detection\comictextdetector.pt",
+            "detection\comictextdetector.pt.onnx",
+            "ocr\ocr_ar_48px.ckpt",
+            "ocr\alphabet-all-v7.txt",
+            "inpainting\inpainting_lama_mpe.ckpt"
+        )
+        $allExist = $true
+        foreach ($m in $requiredModels) {
+            if (-not (Test-Path (Join-Path $modelsDir $m))) {
+                $allExist = $false
+                break
+            }
+        }
+        if ($allExist) {
+            Write-Host "[$stepNum] Core models already downloaded at: $modelsDir" -ForegroundColor Yellow
+        } else {
+            Write-Host "[$stepNum] Some models missing, re-downloading..." -ForegroundColor Yellow
+            & "$PSScriptRoot\download_models.ps1" -TargetDir $modelsDir
+            if ($LASTEXITCODE -ne 0) { throw "Model download failed" }
+        }
+    } else {
+        Write-Host "[$stepNum] Downloading core models..." -ForegroundColor Green
+        & "$PSScriptRoot\download_models.ps1" -TargetDir $modelsDir
+        if ($LASTEXITCODE -ne 0) { throw "Model download failed" }
+    }
+} else {
+    Write-Host "[$stepNum] Skipping model download" -ForegroundColor Yellow
+}
+
+# ── Step 4: Package with electron-builder ──
 $stepNum++
 if (-not $SkipPackage) {
     Write-Host "[$stepNum] Packaging with electron-builder..." -ForegroundColor Green

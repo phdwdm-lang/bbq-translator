@@ -1,5 +1,6 @@
 export interface ElectronMts {
   backendUrl: string;
+  getBackendUrl: () => Promise<string>;
   openImportDialog: () => Promise<{
     canceled: boolean;
     entries: Array<{ path: string; isDirectory: boolean }>;

@@ -15,6 +15,8 @@ import { useReaderZoom } from "../../../../hooks/useReaderZoom";
 import { ReaderContent } from "../../../../components/reader/ReaderContent";
 import { ReaderProgressBar } from "../../../../components/reader/ReaderProgressBar";
 import { READER_VIEW_MODES, DEFAULT_VIEW_MODE, type ReaderViewMode } from "../../../../constants/reader";
+import { useTitleBarOverlay } from "../../../../hooks/useTitleBarOverlay";
+import { TITLE_BAR_OVERLAY_TRANSPARENT, TITLE_BAR_SYMBOL_COLOR_MUTED } from "../../../../constants/window";
 
 export default function ChapterDetailPage(props: { params: Promise<{ bookId: string; chapterId: string }> }) {
   const params = usePromise(props.params);
@@ -26,12 +28,10 @@ export default function ChapterDetailPage(props: { params: Promise<{ bookId: str
   const [toolbarVisible, setToolbarVisible] = useState(true);
   const { zoom, zoomPct, zoomIn, zoomOut, resetZoom } = useReaderZoom();
 
-  useEffect(() => {
-    const mts = window.mts;
-    if (!mts) return;
-    void mts.setTitleBarOverlay("#1e293b", "#94a3b8", 40);
-    return () => { void mts.setTitleBarOverlay("#ffffff", "#475569", 40); };
-  }, []);
+  useTitleBarOverlay({
+    color: TITLE_BAR_OVERLAY_TRANSPARENT,
+    symbolColor: TITLE_BAR_SYMBOL_COLOR_MUTED,
+  });
 
   const safeDecode = (s: string) => {
     try {

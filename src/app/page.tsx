@@ -14,10 +14,12 @@ import {
   listExtensions,
   resolveImageToBlob,
   scanMangaImage,
+  isMissingApiKeyError,
   type ExtensionItem,
 } from "../lib/translateClient";
+import { isApiKeyConfigured, getProviderDisplayName } from "../constants/credentials";
 import { putBlob, getBlob, deleteBlob } from "../lib/blobDb";
-import { addPageToChapter, addPageToWorkspace, createChapter, createEditorWorkspace, clearEditorWorkspace, getWorkspaceBlobKeys, ensureQuickBook, loadLibrary, notifyMitChange, QUICK_BOOK_ID, subscribeLibrary } from "../lib/storage";
+import { addPageToChapter, addPageToWorkspace, createChapter, createEditorWorkspace, clearEditorWorkspace, getWorkspaceBlobKeys, ensureQuickBook, loadLibrary, notifyMitChange, QUICK_BOOK_ID, subscribeLibrary, removeChapters } from "../lib/storage";
 import { SettingsModal } from "../components/SettingsModal";
 import { useDialog } from "../components/common/DialogProvider";
 import { ProgressModal } from "../components/common/ProgressModal";
@@ -31,6 +33,14 @@ import {
   setTranslationModalOpen,
   closeAndCleanupTask,
   getTaskById,
+  resolveTranslationStageTitle,
+  TRANSLATION_STAGE_CANCELED,
+  TRANSLATION_STAGE_DONE,
+  TRANSLATION_STAGE_FAILED,
+  TRANSLATION_STAGE_PARSE_FILES,
+  TRANSLATION_STAGE_PREPARE_EDITOR,
+  TRANSLATION_STAGE_SCAN_REGIONS,
+  TRANSLATION_STAGE_TRANSLATING,
 } from "../lib/translationProgress";
 import { DETECTION_RESOLUTION, INPAINTING_SIZE } from "../constants/editor";
 import type { ElectronMts } from "../types/electron";
@@ -59,7 +69,7 @@ export default function Home() {
     const editorTaskId = crypto.randomUUID();
     const chapterTitle = selectedName || makeTimestampName();
     startTranslation(editorTaskId, chapterTitle);
-    updateTranslationProgress(editorTaskId, { stage: "准备编辑项目", value: 0, text: `0/${importedImages.length}`, error: "" });
+    updateTranslationProgress(editorTaskId, { stage: TRANSLATION_STAGE_PREPARE_EDITOR, value: 0, text: `0/${importedImages.length}`, error: "" });
 
     const aborter = new AbortController();
     abortersRef.current.set(editorTaskId, aborter);
@@ -71,7 +81,7 @@ export default function Home() {
       for (let i = 0; i < importedImages.length; i += 1) {
         if (aborter.signal.aborted) throw new Error("已取消");
         const f = importedImages[i];
-        updateTranslationProgress(editorTaskId, { stage: "扫描文本区域", text: `${i}/${total}` });
+        updateTranslationProgress(editorTaskId, { stage: TRANSLATION_STAGE_SCAN_REGIONS, text: `${i}/${total}` });
 
         const originalKey = await putBlob(f, { dir: `${QUICK_BOOK_ID}/_workspace`, name: f.name });
 
@@ -115,12 +125,16 @@ export default function Home() {
         updateTranslationProgress(editorTaskId, { value: eased, text: `${i + 1}/${total}` });
       }
 
-      finishTranslation(editorTaskId, "完成");
+      finishTranslation(editorTaskId, TRANSLATION_STAGE_DONE);
       updateTranslationProgress(editorTaskId, { text: `完成：${importedImages.length}/${importedImages.length}` });
+      setTranslationModalOpen(false);
       router.push("/translate?workspace=1");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err ?? "Failed");
-      finishTranslation(editorTaskId, message === "已取消" ? "已取消" : "失败", { error: message });
+      let message = err instanceof Error ? err.message : String(err ?? "Failed");
+      if (isMissingApiKeyError(err)) {
+        message = "API Key 缺失或无效，请在设置 → 账号中配置";
+      }
+      finishTranslation(editorTaskId, message === TRANSLATION_STAGE_CANCELED ? TRANSLATION_STAGE_CANCELED : TRANSLATION_STAGE_FAILED, { error: message });
 
       const blobKeys = getWorkspaceBlobKeys();
       clearEditorWorkspace();
@@ -177,7 +191,7 @@ export default function Home() {
 
   const [advDetectionSize, setAdvDetectionSize] = useState<number>(DETECTION_RESOLUTION);
   const [advInpaintingSize, setAdvInpaintingSize] = useState<number>(INPAINTING_SIZE);
-  const [advDetector, setAdvDetector] = useState<string>("ctd");
+  const [advDetector, setAdvDetector] = useState<string>("default");
   const [advTranslator, setAdvTranslator] = useState<string>("deepseek");
   const [advOcrMode, setAdvOcrMode] = useState<string>("auto");
   const [advInpainter, setAdvInpainter] = useState<string>("lama_mpe");
@@ -544,29 +558,38 @@ export default function Home() {
       return;
     }
 
+    if (!isApiKeyConfigured(advTranslator)) {
+      const providerName = getProviderDisplayName(advTranslator);
+      void showAlert({ title: "缺少 API Key", message: `翻译器 ${providerName} 需要配置 API Key 才能使用。请在设置 → 账号中填写。` });
+      setShowSettingsModal(true);
+      return;
+    }
+
     try { window.localStorage.setItem(STORAGE_KEY_LAST_LANG, targetLanguage); } catch {}
 
+    ensureQuickBook();
     const chapterTitle = selectedName || makeTimestampName();
-    const chapter = createChapter(QUICK_BOOK_ID, chapterTitle, { kind: "cooked" });
-    const autoTaskId = chapter.id;
+    const autoTaskId = crypto.randomUUID();
 
     setShowImportModal(false);
     const firstCoverUrl = importedImages.length > 0 ? URL.createObjectURL(importedImages[0]) : "";
     const total = importedImages.length;
     startTranslation(autoTaskId, chapterTitle, { coverUrl: firstCoverUrl, totalCount: total });
-    updateTranslationProgress(autoTaskId, { stage: "解析文件", value: 0, text: `0/${total}`, error: "" });
+    updateTranslationProgress(autoTaskId, { stage: TRANSLATION_STAGE_PARSE_FILES, value: 0, text: `0/${total}`, error: "" });
 
     const aborter = new AbortController();
     abortersRef.current.set(autoTaskId, aborter);
 
     let successCount = 0;
     let failedCount = 0;
+    let apiKeyError = false;
+    const pendingPages: Array<{ fileName: string; blob: Blob }> = [];
 
     try {
       for (let i = 0; i < importedImages.length; i += 1) {
         if (aborter.signal.aborted) throw new Error("已取消");
         const f = importedImages[i];
-        updateTranslationProgress(autoTaskId, { stage: "翻译中", text: `${i}/${total}` });
+        updateTranslationProgress(autoTaskId, { stage: TRANSLATION_STAGE_TRANSLATING, text: `${i}/${total}` });
 
         try {
           const res = await scanMangaImage({
@@ -582,17 +605,14 @@ export default function Home() {
             signal: aborter.signal,
           });
           const blob = await resolveImageToBlob(res.translatedImage);
-          const blobKey = await putBlob(blob, { dir: `${QUICK_BOOK_ID}/${chapter.id}`, name: f.name });
-          addPageToChapter(QUICK_BOOK_ID, chapter.id, {
-            id: crypto.randomUUID(),
-            fileName: f.name,
-            createdAt: Date.now(),
-            originalBlobKey: blobKey,
-            translatedBlobKey: blobKey,
-          });
+          pendingPages.push({ fileName: f.name, blob });
           successCount += 1;
         } catch (pageErr: unknown) {
           if (aborter.signal.aborted) throw new Error("已取消");
+          if (isMissingApiKeyError(pageErr)) {
+            apiKeyError = true;
+            throw new Error(`API Key 缺失或无效，请在设置 → 账号中检查配置或额度`);
+          }
           failedCount += 1;
         }
 
@@ -602,15 +622,50 @@ export default function Home() {
         updateTranslationProgress(autoTaskId, { value: eased, text: `${i + 1}/${total}`, successCount, failedCount });
       }
 
-      const finalStage = failedCount === total ? "失败" : "完成";
-      finishTranslation(autoTaskId, finalStage);
+      if (pendingPages.length === 0) {
+        throw new Error("所有图片翻译失败，未创建章节");
+      }
+
+      const chapter = createChapter(QUICK_BOOK_ID, chapterTitle, { kind: "cooked" });
+      for (const p of pendingPages) {
+        const blobKey = await putBlob(p.blob, { dir: `${QUICK_BOOK_ID}/${chapter.id}`, name: p.fileName });
+        addPageToChapter(QUICK_BOOK_ID, chapter.id, {
+          id: crypto.randomUUID(),
+          fileName: p.fileName,
+          createdAt: Date.now(),
+          originalBlobKey: blobKey,
+          translatedBlobKey: blobKey,
+        });
+      }
+
+      const finalStage = failedCount > 0 ? TRANSLATION_STAGE_FAILED : TRANSLATION_STAGE_DONE;
+      finishTranslation(autoTaskId, finalStage, failedCount > 0 ? { error: `${failedCount} 张图片翻译失败` } : undefined);
       updateTranslationProgress(autoTaskId, { successCount, failedCount, totalCount: total });
       notifyMitChange();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err ?? "Failed");
-      finishTranslation(autoTaskId, message === "已取消" ? "已取消" : "失败", { error: message });
+      const stage = message === TRANSLATION_STAGE_CANCELED ? TRANSLATION_STAGE_CANCELED : TRANSLATION_STAGE_FAILED;
+      
+      if (apiKeyError && pendingPages.length > 0) {
+        const chapter = createChapter(QUICK_BOOK_ID, chapterTitle, { kind: "cooked" });
+        for (const p of pendingPages) {
+          const blobKey = await putBlob(p.blob, { dir: `${QUICK_BOOK_ID}/${chapter.id}`, name: p.fileName });
+          addPageToChapter(QUICK_BOOK_ID, chapter.id, {
+            id: crypto.randomUUID(),
+            fileName: p.fileName,
+            createdAt: Date.now(),
+            originalBlobKey: blobKey,
+            translatedBlobKey: blobKey,
+          });
+        }
+        notifyMitChange();
+      }
+
+      finishTranslation(autoTaskId, stage, { error: message });
       updateTranslationProgress(autoTaskId, { successCount, failedCount, totalCount: total });
-      notifyMitChange();
+      if (!apiKeyError || pendingPages.length === 0) {
+        notifyMitChange();
+      }
     } finally {
       abortersRef.current.delete(autoTaskId);
     }
@@ -620,7 +675,7 @@ export default function Home() {
     const tid = tp.modalTaskId;
     const aborter = abortersRef.current.get(tid);
     if (aborter) aborter.abort();
-    finishTranslation(tid, "已取消", { error: "已取消" });
+    finishTranslation(tid, TRANSLATION_STAGE_CANCELED, { error: TRANSLATION_STAGE_CANCELED });
   };
 
   const activeTasks = useMemo(() => tp.tasks.filter((t) => t.active), [tp.tasks]);
@@ -639,7 +694,7 @@ export default function Home() {
     return filtered.slice(0, MAX_RECENT_ITEMS);
   }, [recentChapters, MAX_RECENT_ITEMS, activeTaskCount, activeTaskIds, activeTaskTitles]);
   const modalTask = useMemo(() => tp.tasks.find((t) => t.id === tp.modalTaskId), [tp.tasks, tp.modalTaskId]);
-  const progressTitle = modalTask?.stage === "完成" ? "已完成" : modalTask?.stage === "失败" ? "失败" : modalTask?.stage === "已取消" ? "已取消" : "正在翻译";
+  const progressTitle = resolveTranslationStageTitle(modalTask?.stage || "");
 
   return (
     <>
@@ -891,6 +946,7 @@ export default function Home() {
         totalCount={modalTask?.totalCount ?? 0}
         onCancel={cancelProgress}
         onClose={() => closeAndCleanupTask(tp.modalTaskId)}
+        onBackground={() => setTranslationModalOpen(false)}
       />
     </>
   );

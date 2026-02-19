@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Settings, Type, Trash2, RefreshCw, MoveHorizontal, MoveVertical, ScanText, Baseline, Space } from "lucide-react";
 import type { EditorRegion } from "../../types/editor";
 import { useFontOptions } from "../../hooks/useFontOptions";
-import { TextFormattingToolbar } from "./TextFormattingToolbar";
+import { TextFormattingToolbar, BatchTextFormattingToolbar } from "./TextFormattingToolbar";
 import { StrokeSection } from "./StrokeSection";
 import { CustomSelect } from "../common/CustomSelect";
 import { useDialog } from "../common/DialogProvider";
@@ -54,15 +54,19 @@ const COLOR_PRESETS = [
 
 interface EditorPanelRightProps {
   selectedRegion: EditorRegion | null;
+  selectedIds: string[];
   allRegions: EditorRegion[];
   onRegionChange: (id: string, patch: Partial<EditorRegion>) => void;
+  onBatchRegionChange: (ids: string[], patch: Partial<EditorRegion>) => void;
   onRegionSelect: (id: string) => void;
   onRegionDelete: (id: string) => void;
+  onBatchDelete: (ids: string[]) => void;
   onRetranslate?: (id: string, originalText: string) => void;
   onReOcr?: (id: string) => void;
 }
 
-export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, onRegionSelect, onRegionDelete, onRetranslate, onReOcr }: EditorPanelRightProps) {
+export function EditorPanelRight({ selectedRegion, selectedIds, allRegions, onRegionChange, onBatchRegionChange, onRegionSelect, onRegionDelete, onBatchDelete, onRetranslate, onReOcr }: EditorPanelRightProps) {
+  const isMultiSelect = selectedIds.length > 1;
   const [activeTab, setActiveTab] = useState<"global" | "text">("text");
   const selectedRegionRef = useRef<HTMLDivElement>(null);
   const { fontOptions, defaultFontValue, ensureRegionFont } = useFontOptions(allRegions, onRegionChange);
@@ -187,10 +191,250 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                 <Type className="w-8 h-8 mb-2 opacity-20" />
                 <p>当前页面没有文本框</p>
               </div>
+            ) : isMultiSelect ? (
+              /* Multi-select mode: show batch operations */
+              <div className="space-y-4">
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                        <Type className="w-4 h-4 text-indigo-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-indigo-700">已选中 {selectedIds.length} 个文本框</p>
+                        <p className="text-[10px] text-indigo-500">批量编辑模式</p>
+                      </div>
+                    </div>
+                    <button
+                      className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors"
+                      title="删除选中的文本框"
+                      onClick={async () => {
+                        const ok = await confirm({ 
+                          title: "批量删除", 
+                          message: `确定要删除选中的 ${selectedIds.length} 个文本框吗？此操作不可撤销。`, 
+                          variant: "danger", 
+                          confirmLabel: "删除全部" 
+                        });
+                        if (ok) onBatchDelete(selectedIds);
+                      }}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Batch style settings */}
+                {selectedRegion && (
+                  <div className="border border-slate-200 rounded-xl p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700">样式设置</label>
+                      <button
+                        className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium"
+                        onClick={() => {
+                          onBatchRegionChange(selectedIds, {
+                            fontSize: 16,
+                            fontFamily: defaultFontValue,
+                            fontStyle: undefined,
+                            textDecoration: undefined,
+                            fill: "#000000",
+                            align: "left",
+                            lineHeight: undefined,
+                            letterSpacing: undefined,
+                            direction: "horizontal",
+                            strokeColor: undefined,
+                            strokeWidth: undefined,
+                          });
+                        }}
+                      >重置样式</button>
+                    </div>
+
+                    {/* Text Formatting Toolbar */}
+                    <BatchTextFormattingToolbar selectedIds={selectedIds} selectedRegion={selectedRegion} onBatchRegionChange={onBatchRegionChange} />
+
+                    {/* Font & Size Row */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 mb-1 block">字体</label>
+                        <CustomSelect
+                          options={fontOptions}
+                          value={fontOptions.some((o) => o.value === (selectedRegion.fontFamily || defaultFontValue)) ? (selectedRegion.fontFamily || defaultFontValue) : defaultFontValue}
+                          onChange={(v) => onBatchRegionChange(selectedIds, { fontFamily: v })}
+                          size="sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 mb-1 block">字号</label>
+                        <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white hover:border-slate-300 focus-within:border-indigo-500 transition-colors">
+                          <button
+                            type="button"
+                            className="w-7 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 border-r border-slate-200"
+                            onClick={() => {
+                              const next = Math.max(1, (selectedRegion.fontSize || 16) - 1);
+                              onBatchRegionChange(selectedIds, { fontSize: next });
+                            }}
+                          >-</button>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className="flex-1 p-1 text-xs text-center outline-none w-full min-w-0"
+                            value={fontSizeDraft}
+                            onChange={(e) => setFontSizeDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const next = parseInt(fontSizeDraft, 10);
+                                if (next > 0) onBatchRegionChange(selectedIds, { fontSize: next });
+                              }
+                            }}
+                            onBlur={() => {
+                              const next = parseInt(fontSizeDraft, 10);
+                              if (next > 0) onBatchRegionChange(selectedIds, { fontSize: next });
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="w-7 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 border-l border-slate-200"
+                            onClick={() => {
+                              const next = (selectedRegion.fontSize || 16) + 1;
+                              onBatchRegionChange(selectedIds, { fontSize: next });
+                            }}
+                          >+</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Color Section */}
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-2 block">文字颜色</label>
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <input
+                            type="color"
+                            value={selectedRegion.fill || "#000000"}
+                            onChange={(e) => onBatchRegionChange(selectedIds, { fill: e.target.value })}
+                            className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer"
+                          />
+                        </div>
+                        <div className="flex gap-1">
+                          {COLOR_PRESETS.map((preset) => (
+                            <button
+                              key={preset.color}
+                              className={`w-6 h-6 rounded-full border-2 ${preset.border} ${selectedRegion.fill === preset.color ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`}
+                              style={{ backgroundColor: preset.color }}
+                              onClick={() => onBatchRegionChange(selectedIds, { fill: preset.color })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stroke Section */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] text-slate-500">描边效果</label>
+                        <button
+                          className={`w-9 h-5 rounded-full transition-colors relative ${selectedRegion.strokeWidth ? "bg-indigo-500" : "bg-slate-200"}`}
+                          onClick={() => {
+                            if (selectedRegion.strokeWidth) {
+                              onBatchRegionChange(selectedIds, { strokeWidth: undefined, strokeColor: undefined });
+                            } else {
+                              onBatchRegionChange(selectedIds, { strokeWidth: 2, strokeColor: "#FFFFFF" });
+                            }
+                          }}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${selectedRegion.strokeWidth ? "left-4" : "left-0.5"}`} />
+                        </button>
+                      </div>
+                      {selectedRegion.strokeWidth && (
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={selectedRegion.strokeColor || "#FFFFFF"}
+                              onChange={(e) => onBatchRegionChange(selectedIds, { strokeColor: e.target.value })}
+                              className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer"
+                            />
+                            <span className="text-[10px] text-slate-500">描边色</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={selectedRegion.strokeWidth || 2}
+                              onChange={(e) => onBatchRegionChange(selectedIds, { strokeWidth: parseInt(e.target.value, 10) || 2 })}
+                              className="w-14 p-1.5 text-xs border border-slate-200 rounded-lg text-center"
+                            />
+                            <span className="text-[10px] text-slate-500">粗细 px</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Direction */}
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-2 block">文本方向</label>
+                      <div className="flex gap-2">
+                        <button
+                          className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-1 transition-colors ${
+                            selectedRegion.direction !== "vertical" ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                          onClick={() => onBatchRegionChange(selectedIds, { direction: "horizontal" })}
+                        >
+                          <MoveHorizontal className="w-3 h-3" />
+                          横排
+                        </button>
+                        <button
+                          className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-1 transition-colors ${
+                            selectedRegion.direction === "vertical" ? "bg-indigo-50 border-indigo-300 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                          onClick={() => onBatchRegionChange(selectedIds, { direction: "vertical" })}
+                        >
+                          <MoveVertical className="w-3 h-3" />
+                          竖排
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Advanced Typography */}
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-2 block">高级排版</label>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-slate-500 w-8">行距</span>
+                          <input
+                            type="range"
+                            min="0.8"
+                            max="2.5"
+                            step="0.1"
+                            value={selectedRegion.lineHeight || 1.0}
+                            onChange={(e) => onBatchRegionChange(selectedIds, { lineHeight: parseFloat(e.target.value) })}
+                            className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                          />
+                          <span className="text-[10px] text-slate-600 w-8 text-right">{(selectedRegion.lineHeight || 1.0).toFixed(1)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-slate-500 w-8">字距</span>
+                          <input
+                            type="range"
+                            min="-5"
+                            max="20"
+                            step="0.5"
+                            value={selectedRegion.letterSpacing || 0}
+                            onChange={(e) => onBatchRegionChange(selectedIds, { letterSpacing: parseFloat(e.target.value) })}
+                            className="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                          />
+                          <span className="text-[10px] text-slate-600 w-8 text-right">{(selectedRegion.letterSpacing || 0).toFixed(1)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 {allRegions.map((region) => {
-                  const isSelected = selectedRegion?.id === region.id;
+                  const isSelected = selectedRegion?.id === region.id || selectedIds.includes(region.id);
                   return (
                     <div
                       key={region.id}
@@ -300,7 +544,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                               className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onRegionChange(selectedRegion.id, {
+                                onRegionChange(region.id, {
                                   fontSize: 16,
                                   fontFamily: defaultFontValue,
                                   fontStyle: undefined,
@@ -316,7 +560,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                           </div>
 
                           {/* Text Formatting Toolbar */}
-                          <TextFormattingToolbar region={selectedRegion} onRegionChange={onRegionChange} />
+                          <TextFormattingToolbar region={region} onRegionChange={onRegionChange} />
 
                           {/* Font & Size Row */}
                           <div className="grid grid-cols-3 gap-2">
@@ -324,8 +568,8 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                               <label className="text-[10px] text-slate-500 mb-1 block">字体</label>
                               <CustomSelect
                                 options={fontOptions}
-                                value={fontOptions.some((o) => o.value === (selectedRegion.fontFamily || defaultFontValue)) ? (selectedRegion.fontFamily || defaultFontValue) : defaultFontValue}
-                                onChange={(v) => onRegionChange(selectedRegion.id, { fontFamily: v })}
+                                value={fontOptions.some((o) => o.value === (region.fontFamily || defaultFontValue)) ? (region.fontFamily || defaultFontValue) : defaultFontValue}
+                                onChange={(v) => onRegionChange(region.id, { fontFamily: v })}
                                 size="sm"
                               />
                             </div>
@@ -338,7 +582,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                   onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const next = Math.max(1, (selectedRegion.fontSize || 16) - 1);
+                                    const next = Math.max(1, (region.fontSize || 16) - 1);
                                     commitFontSize(String(next));
                                   }}
                                 >-</button>
@@ -353,7 +597,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                   onKeyDown={(e) => {
                                     e.stopPropagation();
                                     if (e.key === "Enter") { e.preventDefault(); commitFontSize(fontSizeDraft); }
-                                    if (e.key === "Escape") { e.preventDefault(); setFontSizeDraft(String(selectedRegion.fontSize || 16)); }
+                                    if (e.key === "Escape") { e.preventDefault(); setFontSizeDraft(String(region.fontSize || 16)); }
                                   }}
                                   onBlur={() => commitFontSize(fontSizeDraft)}
                                 />
@@ -363,7 +607,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                   onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const next = (selectedRegion.fontSize || 16) + 1;
+                                    const next = (region.fontSize || 16) + 1;
                                     commitFontSize(String(next));
                                   }}
                                 >+</button>
@@ -379,14 +623,14 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                 <input
                                   type="color"
                                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                  value={selectedRegion.fill || "#000000"}
+                                  value={region.fill || "#000000"}
                                   onMouseDown={(e) => e.stopPropagation()}
                                   onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => onRegionChange(selectedRegion.id, { fill: e.target.value })}
+                                  onChange={(e) => onRegionChange(region.id, { fill: e.target.value })}
                                 />
                                 <div
                                   className="w-9 h-9 rounded-lg border-2 border-slate-200 shadow-inner cursor-pointer hover:border-slate-300 transition-colors"
-                                  style={{ backgroundColor: selectedRegion.fill || "#000000" }}
+                                  style={{ backgroundColor: region.fill || "#000000" }}
                                 />
                               </div>
                               <div className="flex-1 flex items-center gap-1 bg-slate-50 p-1.5 rounded-lg">
@@ -398,7 +642,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                     style={{ backgroundColor: color }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      onRegionChange(selectedRegion.id, { fill: color });
+                                      onRegionChange(region.id, { fill: color });
                                     }}
                                     title={color}
                                   />
@@ -408,7 +652,7 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                           </div>
 
                           {/* Stroke Section */}
-                          <StrokeSection region={selectedRegion} onRegionChange={onRegionChange} />
+                          <StrokeSection region={region} onRegionChange={onRegionChange} />
 
                           {/* Direction Toggle */}
                           <div>
@@ -417,9 +661,9 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                               <button
                                 type="button"
                                 className={`flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all ${
-                                  selectedRegion.direction !== "vertical" ? "bg-white shadow-sm font-medium text-indigo-600" : "text-slate-600 hover:bg-white/50"
+                                  region.direction !== "vertical" ? "bg-white shadow-sm font-medium text-indigo-600" : "text-slate-600 hover:bg-white/50"
                                 }`}
-                                onClick={(e) => { e.stopPropagation(); onRegionChange(selectedRegion.id, { direction: "horizontal" }); }}
+                                onClick={(e) => { e.stopPropagation(); onRegionChange(region.id, { direction: "horizontal" }); }}
                                 title="横向排版"
                               >
                                 <MoveHorizontal className="w-3.5 h-3.5" /> 横排
@@ -427,9 +671,9 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                               <button
                                 type="button"
                                 className={`flex-1 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all ${
-                                  selectedRegion.direction === "vertical" ? "bg-white shadow-sm font-medium text-indigo-600" : "text-slate-600 hover:bg-white/50"
+                                  region.direction === "vertical" ? "bg-white shadow-sm font-medium text-indigo-600" : "text-slate-600 hover:bg-white/50"
                                 }`}
-                                onClick={(e) => { e.stopPropagation(); onRegionChange(selectedRegion.id, { direction: "vertical" }); }}
+                                onClick={(e) => { e.stopPropagation(); onRegionChange(region.id, { direction: "vertical" }); }}
                                 title="竖向排版"
                               >
                                 <MoveVertical className="w-3.5 h-3.5" /> 竖排
@@ -450,14 +694,14 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                 min="0.5"
                                 max="3"
                                 step="0.1"
-                                value={selectedRegion.lineHeight ?? 1.0}
-                                onChange={(e) => onRegionChange(selectedRegion.id, { lineHeight: parseFloat(e.target.value) })}
+                                value={region.lineHeight ?? 1.0}
+                                onChange={(e) => onRegionChange(region.id, { lineHeight: parseFloat(e.target.value) })}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => e.stopPropagation()}
                                 className="range-slider flex-1"
                               />
-                              <span className="w-8 text-[10px] text-slate-600 font-mono text-right">{selectedRegion.lineHeight?.toFixed(1) || "1.0"}</span>
+                              <span className="w-8 text-[10px] text-slate-600 font-mono text-right">{region.lineHeight?.toFixed(1) || "1.0"}</span>
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="w-16 flex items-center gap-1 text-slate-500">
@@ -469,14 +713,14 @@ export function EditorPanelRight({ selectedRegion, allRegions, onRegionChange, o
                                 min="-5"
                                 max="20"
                                 step="0.5"
-                                value={selectedRegion.letterSpacing ?? 0}
-                                onChange={(e) => onRegionChange(selectedRegion.id, { letterSpacing: parseFloat(e.target.value) })}
+                                value={region.letterSpacing ?? 0}
+                                onChange={(e) => onRegionChange(region.id, { letterSpacing: parseFloat(e.target.value) })}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => e.stopPropagation()}
                                 className="range-slider flex-1"
                               />
-                              <span className="w-8 text-[10px] text-slate-600 font-mono text-right">{selectedRegion.letterSpacing?.toFixed(1) || "0.0"}</span>
+                              <span className="w-8 text-[10px] text-slate-600 font-mono text-right">{region.letterSpacing?.toFixed(1) || "0.0"}</span>
                             </div>
                           </div>
                         </div>

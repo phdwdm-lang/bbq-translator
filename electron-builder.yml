@@ -69,7 +69,10 @@ extraResources:
       - "!node_modules/**"
       - "!**/*.egg-info/**"
       - "!config.json"
+      - "!models"
       - "!models/**"
+      - "!result"
+      - "!result/**"
       - "!**/*.whl"
       - "!.env"
       - "!server/**"
@@ -80,6 +83,11 @@ extraResources:
   # Embedded Python (built via scripts/build_embedded_python.ps1)
   - from: "build/python"
     to: "python"
+    filter:
+      - "**/*"
+  # Bundled models for offline use (~420 MB)
+  - from: "build/bundled-models"
+    to: "bundled-models"
     filter:
       - "**/*"
 

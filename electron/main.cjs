@@ -1,8 +1,8 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu, globalShortcut } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const http = require("http");
 
 // ────────────────────────────────────────────
@@ -13,7 +13,7 @@ const BACKEND_PORT_START = 8000;
 const BACKEND_PORT_END = 8010;
 const HEALTH_CHECK_PATH = "/health";
 const HEALTH_CHECK_INTERVAL_MS = 500;
-const HEALTH_CHECK_TIMEOUT_MS = 30_000;
+const HEALTH_CHECK_TIMEOUT_MS = 180_000;
 const AUTO_RESTART_MAX_RETRIES = 3;
 const AUTO_RESTART_COOLDOWN_MS = 5_000;
 
@@ -43,6 +43,13 @@ const MIME_MAP = {
   ".epub": "application/epub+zip",
   ".mobi": "application/x-mobipocket-ebook",
 };
+
+const BUNDLED_MODELS = [
+  { subDir: "detection", fileName: "detect-20241225.ckpt" },
+  { subDir: "ocr", fileName: "ocr_ar_48px.ckpt" },
+  { subDir: "ocr", fileName: "alphabet-all-v7.txt" },
+  { subDir: "inpainting", fileName: "inpainting_lama_mpe.ckpt" },
+];
 
 // ────────────────────────────────────────────
 // Paths
@@ -76,6 +83,59 @@ function resolveExtensionsDir() {
 
 function resolveLogsDir() {
   return path.join(resolveDataDir(), "logs");
+}
+
+function resolveBundledModelsDir() {
+  if (IS_PACKAGED) {
+    return path.join(process.resourcesPath, "bundled-models");
+  }
+  return "";
+}
+
+function ensureBundledModels() {
+  if (!IS_PACKAGED) return;
+
+  const bundledDir = resolveBundledModelsDir();
+  const targetDir = path.join(resolveDataDir(), "models");
+
+  if (!bundledDir || !fs.existsSync(bundledDir)) {
+    console.log("[electron] No bundled models directory found, skipping copy");
+    return;
+  }
+
+  let copiedCount = 0;
+  let skippedCount = 0;
+
+  for (const model of BUNDLED_MODELS) {
+    const srcPath = path.join(bundledDir, model.subDir, model.fileName);
+    const dstPath = path.join(targetDir, model.subDir, model.fileName);
+
+    if (fs.existsSync(dstPath)) {
+      skippedCount++;
+      continue;
+    }
+
+    if (!fs.existsSync(srcPath)) {
+      console.warn(`[electron] Bundled model not found: ${srcPath}`);
+      continue;
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(dstPath), { recursive: true });
+      fs.copyFileSync(srcPath, dstPath);
+      console.log(`[electron] Copied model: ${model.subDir}/${model.fileName}`);
+      copiedCount++;
+    } catch (err) {
+      console.error(`[electron] Failed to copy model ${model.fileName}:`, err);
+    }
+  }
+
+  if (copiedCount > 0) {
+    console.log(`[electron] Copied ${copiedCount} bundled models to ${targetDir}`);
+  }
+  if (skippedCount > 0) {
+    console.log(`[electron] Skipped ${skippedCount} models (already exist)`);
+  }
 }
 
 // ────────────────────────────────────────────
@@ -161,6 +221,7 @@ async function waitForBackendReady(port, timeoutMs = HEALTH_CHECK_TIMEOUT_MS) {
 }
 
 async function startBackend() {
+  killStaleBackendProcesses();
   backendPort = await findAvailablePort();
   console.log(`[electron] Starting backend on port ${backendPort}...`);
 
@@ -173,8 +234,19 @@ async function startBackend() {
   const logFile = path.join(logsDir, `backend-${Date.now()}.log`);
   const logStream = fs.createWriteStream(logFile, { flags: "a" });
 
-  process.env.MTS_BACKEND_PORT = String(backendPort);
-  process.env.MTS_BACKEND_HOST = BACKEND_HOST;
+  const dataDir = resolveDataDir();
+  const hfHome = path.join(dataDir, "hf_home");
+  const backendEnv = {
+    ...process.env,
+    PYTHONUNBUFFERED: "1",
+    MTS_BACKEND_PORT: String(backendPort),
+    MTS_BACKEND_HOST: BACKEND_HOST,
+    MTS_BASE_PATH: dataDir,
+    MTS_CODE_PATH: backendDir,
+    HF_HOME: hfHome,
+    HF_HUB_CACHE: path.join(hfHome, "hub"),
+    TRANSFORMERS_CACHE: path.join(hfHome, "transformers"),
+  };
 
   const args = [
     "start_backend.py",
@@ -183,10 +255,12 @@ async function startBackend() {
     "--log-dir", logsDir,
   ];
 
+  console.log(`[electron] MTS_BASE_PATH: ${dataDir}`);
+
   backendProcess = spawn(pythonExe, args, {
     cwd: backendDir,
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env },
+    env: backendEnv,
   });
 
   backendProcess.stdout.pipe(logStream);
@@ -236,16 +310,47 @@ async function startBackend() {
   return ready;
 }
 
+function forceKillProcessTree(pid) {
+  if (!pid) return;
+  try {
+    if (process.platform === "win32") {
+      execSync(`taskkill /F /T /PID ${pid}`, { stdio: "ignore" });
+    } else {
+      process.kill(-pid, "SIGKILL");
+    }
+  } catch {
+    // process may have already exited
+  }
+}
+
 function stopBackend() {
   if (!backendProcess) return;
   intentionalStop = true;
-  console.log("[electron] Stopping backend...");
-  try {
-    backendProcess.kill("SIGTERM");
-  } catch (err) {
-    console.error("[electron] Failed to stop backend:", err);
-  }
+  const pid = backendProcess.pid;
+  console.log(`[electron] Stopping backend (PID ${pid})...`);
+  forceKillProcessTree(pid);
   backendProcess = null;
+}
+
+function killStaleBackendProcesses() {
+  if (process.platform !== "win32") return;
+  const pythonExe = resolvePythonExe();
+  try {
+    const wmicOut = execSync(
+      `wmic process where "ExecutablePath='${pythonExe.replace(/\\/g, "\\\\")}' and CommandLine like '%start_backend%'" get ProcessId /format:list`,
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }
+    );
+    const pids = wmicOut.match(/ProcessId=(\d+)/g);
+    if (pids) {
+      for (const m of pids) {
+        const stalePid = m.split("=")[1];
+        console.log(`[electron] Killing stale backend process PID ${stalePid}`);
+        forceKillProcessTree(parseInt(stalePid, 10));
+      }
+    }
+  } catch {
+    // wmic may fail on some systems, not critical
+  }
 }
 
 function notifyRendererBackendStatus(status) {
@@ -364,6 +469,12 @@ ipcMain.handle("get-app-paths", async () => ({
   dataDir: resolveDataDir(),
   extensionsDir: resolveExtensionsDir(),
   logsDir: resolveLogsDir(),
+}));
+
+ipcMain.handle("get-backend-url", async () => ({
+  url: `http://${BACKEND_HOST}:${backendPort}`,
+  port: backendPort,
+  host: BACKEND_HOST,
 }));
 
 ipcMain.handle("restart-backend", async () => {
@@ -741,7 +852,7 @@ const createWindow = async () => {
     show: false,
     titleBarStyle: "hidden",
     titleBarOverlay: {
-      color: "#ffffff",
+      color: "rgba(0,0,0,0)",
       symbolColor: "#475569",
       height: 40,
     },
@@ -763,6 +874,19 @@ const createWindow = async () => {
 
   win.once("ready-to-show", () => {
     win.show();
+  });
+
+  // DevTools shortcut: F12 or Ctrl+Shift+I
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i")) {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+    // Ctrl+Shift+R: Force reload
+    if (input.control && input.shift && input.key.toLowerCase() === "r") {
+      win.webContents.reloadIgnoringCache();
+      event.preventDefault();
+    }
   });
 
   const baseUrl = IS_PACKAGED
@@ -797,6 +921,8 @@ const createWindow = async () => {
 // App lifecycle
 // ────────────────────────────────────────────
 app.whenReady().then(async () => {
+  ensureBundledModels();
+
   const skipBackend = process.env.MTS_SKIP_BACKEND === "1";
 
   // Start backend in background — don't block window creation

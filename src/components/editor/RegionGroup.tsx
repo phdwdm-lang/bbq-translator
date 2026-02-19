@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Image as KonvaImage, Rect, Text, Group, Transformer, Label, Tag } from "react-konva";
 import Konva from "konva";
 import type { EditorRegion } from "../../types/editor";
-import { API_BASE } from "../../lib/env";
+import { getBackendUrl } from "../../lib/env";
 import {
   debounce,
   previewCache,
@@ -16,7 +16,7 @@ import {
 interface RegionGroupProps {
   region: EditorRegion;
   isSelected: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null, options?: { ctrlKey?: boolean }) => void;
   onChange: (id: string, box: [number, number, number, number], text: string) => void;
   scale: number;
   showOriginal?: boolean;
@@ -94,7 +94,7 @@ export function RegionGroup({
       const autoStrokeColor = getContrastingStrokeColor(fillColor);
       const userStroke = r.strokeWidth !== undefined && r.strokeWidth > 0;
 
-      const response = await fetch(`${API_BASE}/render_text_preview`, {
+      const response = await fetch(`${getBackendUrl()}/render_text_preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -193,7 +193,7 @@ export function RegionGroup({
         draggable={!showOriginal}
         onClick={(e) => {
           e.cancelBubble = true;
-          if (!showOriginal) onSelect(region.id);
+          if (!showOriginal) onSelect(region.id, { ctrlKey: e.evt.ctrlKey || e.evt.metaKey });
         }}
         onTap={(e) => {
           e.cancelBubble = true;

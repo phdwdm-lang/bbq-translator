@@ -1,10 +1,35 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-const backendPort = process.env.MTS_BACKEND_PORT || "8000";
 const backendHost = process.env.MTS_BACKEND_HOST || "127.0.0.1";
 
+// NOTE: backendPort is fetched dynamically via IPC because the port is determined
+// at runtime by main.cjs after finding an available port. The preload script
+// loads before startBackend() completes, so we cannot use process.env here.
+let cachedBackendUrl = null;
+
 contextBridge.exposeInMainWorld("mts", {
-  backendUrl: `http://${backendHost}:${backendPort}`,
+  // Getter that fetches port from main process on first access
+  get backendUrl() {
+    if (cachedBackendUrl) return cachedBackendUrl;
+    // Fallback: use env var if available (dev mode), otherwise default
+    const port = process.env.MTS_BACKEND_PORT || "8000";
+    return `http://${backendHost}:${port}`;
+  },
+  // Async method to get the actual backend URL (preferred)
+  getBackendUrl: async () => {
+    if (cachedBackendUrl) return cachedBackendUrl;
+    try {
+      const result = await ipcRenderer.invoke("get-backend-url");
+      if (result?.url) {
+        cachedBackendUrl = result.url;
+        return cachedBackendUrl;
+      }
+    } catch (e) {
+      console.error("[preload] Failed to get backend URL:", e);
+    }
+    const port = process.env.MTS_BACKEND_PORT || "8000";
+    return `http://${backendHost}:${port}`;
+  },
 
   openImportDialog: async () => ipcRenderer.invoke("open-import-dialog"),
   listDirImages: async (dirPath) =>

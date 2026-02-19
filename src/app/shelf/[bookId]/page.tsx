@@ -30,7 +30,8 @@ import { importToImages } from "../../../lib/importExtract";
 import { naturalCompare, sanitizeFolderName, makeTimestampName } from "../../../lib/utils";
 import { STORAGE_KEY_DEFAULT_LANG, STORAGE_KEY_LAST_LANG, DEFAULT_INITIAL_LANG } from "../../../constants/languages";
 import type { FileSystemEntryLike } from "../../../types/fileSystem";
-import { probeLang, resolveImageToBlob, scanMangaImage } from "../../../lib/translateClient";
+import { listExtensions, probeLang, resolveImageToBlob, scanMangaImage, type ExtensionItem } from "../../../lib/translateClient";
+import { isApiKeyConfigured, getProviderDisplayName } from "../../../constants/credentials";
 import { cancelJob, runBatchJob } from "../../../lib/jobRunner";
 import { SettingsModal } from "../../../components/SettingsModal";
 import { ProgressModal } from "../../../components/common/ProgressModal";
@@ -167,10 +168,41 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
 
   const [advDetectionSize, setAdvDetectionSize] = useState<number>(DETECTION_RESOLUTION);
   const [advInpaintingSize, setAdvInpaintingSize] = useState<number>(INPAINTING_SIZE);
-  const [advDetector, setAdvDetector] = useState<string>("ctd");
+  const [advDetector, setAdvDetector] = useState<string>("default");
   const [advTranslator, setAdvTranslator] = useState<string>("deepseek");
   const [advOcrMode, setAdvOcrMode] = useState<string>("auto");
   const [advInpainter, setAdvInpainter] = useState<string>("lama_mpe");
+
+  const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
+  const [settingsFocusExtId, setSettingsFocusExtId] = useState<string>("");
+
+  const refreshExtensions = async () => {
+    try {
+      const items = await listExtensions();
+      setExtensions(items);
+    } catch {
+      setExtensions([]);
+    }
+  };
+
+  const installedById = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const it of extensions) map.set(it.id, Boolean(it.installed));
+    return map;
+  }, [extensions]);
+
+  useEffect(() => {
+    if (translateOpen) void refreshExtensions();
+  }, [translateOpen]);
+
+  const ensureExtensionOrOpenSettings = (extId: string, title: string) => {
+    const installed = installedById.get(extId);
+    if (installed) return true;
+    void alert({ title: "提示", message: `该功能需要先安装 ${title} 拓展包。` });
+    setSettingsFocusExtId(extId);
+    setShowSettingsModal(true);
+    return false;
+  };
 
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [progressStage, setProgressStage] = useState<string>("");
@@ -452,6 +484,22 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
     setProgressStage("翻译中");
   }, [showProgressModal, translateJobIds.length, translateJobs, translateDone, translateTotal]);
 
+  const failedJobChapterIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (isQuick) return;
+    const failedJobs = jobs.filter(
+      (j) => j.targetBookId === bookId && j.status === "error" && j.completed === 0
+    );
+    for (const fj of failedJobs) {
+      if (failedJobChapterIdsRef.current.has(fj.targetChapterId)) continue;
+      failedJobChapterIdsRef.current.add(fj.targetChapterId);
+      const chapter = book?.chapters?.find((c) => c.id === fj.targetChapterId);
+      if (chapter && (!chapter.pages || chapter.pages.length === 0)) {
+        removeChapters(bookId, [fj.targetChapterId]);
+      }
+    }
+  }, [isQuick, jobs, bookId, book?.chapters]);
+
   const runningJobs = useMemo(() => {
     if (isQuick) return [] as BatchJob[];
     return jobs.filter((j) => j.targetBookId === bookId && (j.status === "running" || j.status === "pending"));
@@ -506,7 +554,16 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
             <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">书籍不存在</div>
           </div>
         </AppShell>
-        <SettingsModal open={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
+        <SettingsModal
+          open={showSettingsModal}
+          onClose={() => {
+            setShowSettingsModal(false);
+            setSettingsFocusExtId("");
+            void refreshExtensions();
+          }}
+          initialTab={settingsFocusExtId ? "extensions" : undefined}
+          focusExtensionId={settingsFocusExtId || undefined}
+        />
       </>
     );
   }
@@ -774,6 +831,13 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
     if (isQuick) return;
     if (chapterFilter !== "raw") return;
     if (translateTargets.length === 0) return;
+
+    if (!isApiKeyConfigured(advTranslator)) {
+      const providerName = getProviderDisplayName(advTranslator);
+      void alert({ title: "缺少 API Key", message: `翻译器 ${providerName} 需要配置 API Key 才能使用。请在设置 → 账号中填写。` });
+      setShowSettingsModal(true);
+      return;
+    }
 
     setTranslateLoading(true);
     setTranslateError("");
@@ -1447,6 +1511,8 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
           onTranslatorChange: setAdvTranslator,
           onInpainterChange: setAdvInpainter,
           onOcrModeChange: setAdvOcrMode,
+          installedExtensions: installedById,
+          onRequireExtension: ensureExtensionOrOpenSettings,
         }}
         advancedDisabled={translateLoading || translateJobIds.length > 0}
         error={translateError}
@@ -1506,7 +1572,16 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
         initialDescription={book?.description}
       />
 
-      <SettingsModal open={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
+      <SettingsModal
+        open={showSettingsModal}
+        onClose={() => {
+          setShowSettingsModal(false);
+          setSettingsFocusExtId("");
+          void refreshExtensions();
+        }}
+        initialTab={settingsFocusExtId ? "extensions" : undefined}
+        focusExtensionId={settingsFocusExtId || undefined}
+      />
     </>
   );
 }

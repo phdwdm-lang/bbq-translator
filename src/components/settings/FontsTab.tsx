@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Trash2, UploadCloud } from "lucide-react";
-import { API_BASE } from "../../lib/env";
+import { getBackendUrl } from "../../lib/env";
 
 interface FontItem {
   name: string;
@@ -22,7 +22,7 @@ export function FontsTab({ open }: { open: boolean }) {
     setFontsLoading(true);
     setFontsError("");
     try {
-      const res = await fetch(`${API_BASE}/fonts/list`);
+      const res = await fetch(`${getBackendUrl()}/fonts/list`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setFonts(data.fonts || []);
@@ -41,7 +41,7 @@ export function FontsTab({ open }: { open: boolean }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE}/fonts/upload`, {
+      const res = await fetch(`${getBackendUrl()}/fonts/upload`, {
         method: "POST",
         body: formData,
       });
@@ -61,7 +61,7 @@ export function FontsTab({ open }: { open: boolean }) {
   const deleteFont = async (filename: string) => {
     setFontsError("");
     try {
-      const res = await fetch(`${API_BASE}/fonts/${encodeURIComponent(filename)}`, {
+      const res = await fetch(`${getBackendUrl()}/fonts/${encodeURIComponent(filename)}`, {
         method: "DELETE",
       });
       if (!res.ok) {

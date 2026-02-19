@@ -18,23 +18,75 @@ export interface TranslationProgressSnapshot {
   modalOpen: boolean;
 }
 
+export const TRANSLATION_STAGE_DONE = "完成";
+export const TRANSLATION_STAGE_FAILED = "失败";
+export const TRANSLATION_STAGE_CANCELED = "已取消";
+export const TRANSLATION_STAGE_PREPARE_EDITOR = "准备编辑项目";
+export const TRANSLATION_STAGE_SCAN_REGIONS = "扫描文本区域";
+export const TRANSLATION_STAGE_PARSE_FILES = "解析文件";
+export const TRANSLATION_STAGE_TRANSLATING = "翻译中";
+
+export const TRANSLATION_STAGE_TITLE_DONE = "已完成";
+export const TRANSLATION_STAGE_TITLE_FAILED = "失败";
+export const TRANSLATION_STAGE_TITLE_CANCELED = "已取消";
+export const TRANSLATION_STAGE_TITLE_RUNNING = "正在翻译";
+export const TRANSLATION_STAGE_FINISHED = [
+  TRANSLATION_STAGE_DONE,
+  TRANSLATION_STAGE_FAILED,
+  TRANSLATION_STAGE_CANCELED,
+] as const;
+export type TranslationFinishedStage = (typeof TRANSLATION_STAGE_FINISHED)[number];
+
+export function isTranslationStageFinished(stage: string): stage is TranslationFinishedStage {
+  return TRANSLATION_STAGE_FINISHED.includes(stage as TranslationFinishedStage);
+}
+
+export function resolveTranslationStageTitle(stage: string): string {
+  if (stage === TRANSLATION_STAGE_DONE) return TRANSLATION_STAGE_TITLE_DONE;
+  if (stage === TRANSLATION_STAGE_FAILED) return TRANSLATION_STAGE_TITLE_FAILED;
+  if (stage === TRANSLATION_STAGE_CANCELED) return TRANSLATION_STAGE_TITLE_CANCELED;
+  return TRANSLATION_STAGE_TITLE_RUNNING;
+}
+
 const tasks = new Map<string, TranslationTaskState>();
 let modalTaskId = "";
 let modalOpen = false;
 
+// 缓存快照，避免每次调用都创建新对象导致无限循环
+let cachedSnapshot: TranslationProgressSnapshot = {
+  tasks: [],
+  modalTaskId: "",
+  modalOpen: false,
+};
+
+// 服务端渲染使用的稳定空快照
+const SERVER_SNAPSHOT: TranslationProgressSnapshot = {
+  tasks: [],
+  modalTaskId: "",
+  modalOpen: false,
+};
 
 const listeners = new Set<() => void>();
 
-function emit() {
-  for (const fn of listeners) fn();
-}
-
-export function getTranslationProgress(): TranslationProgressSnapshot {
-  return {
+function updateSnapshot() {
+  cachedSnapshot = {
     tasks: Array.from(tasks.values()),
     modalTaskId,
     modalOpen,
   };
+}
+
+function emit() {
+  updateSnapshot();
+  for (const fn of listeners) fn();
+}
+
+export function getTranslationProgress(): TranslationProgressSnapshot {
+  return cachedSnapshot;
+}
+
+export function getServerSnapshot(): TranslationProgressSnapshot {
+  return SERVER_SNAPSHOT;
 }
 
 export function getTaskById(taskId: string): TranslationTaskState | undefined {
@@ -72,14 +124,14 @@ export function updateTranslationProgress(taskId: string, patch: Partial<Pick<Tr
   emit();
 }
 
-export function finishTranslation(taskId: string, stage: "完成" | "失败" | "已取消", extra?: { error?: string }) {
+export function finishTranslation(taskId: string, stage: TranslationFinishedStage, extra?: { error?: string }) {
   const task = tasks.get(taskId);
   if (!task) return;
   tasks.set(taskId, {
     ...task,
     active: false,
     stage,
-    value: stage === "完成" ? 100 : task.value,
+    value: stage === TRANSLATION_STAGE_DONE ? 100 : task.value,
     error: extra?.error || task.error,
   });
   emit();

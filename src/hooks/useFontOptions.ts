@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FontOption } from "../constants/editor";
 import { DEFAULT_FONT_FAMILY_OPTIONS } from "../constants/editor";
-import { API_BASE } from "../lib/env";
+import { getBackendUrl } from "../lib/env";
 import type { EditorRegion } from "../types/editor";
 
 function isFontOption(v: unknown): v is FontOption {
@@ -54,7 +54,7 @@ export function useFontOptions(
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/supported_fonts`);
+        const res = await fetch(`${getBackendUrl()}/supported_fonts`);
         const json: unknown = await res.json();
         const fontsUnknown = (json && typeof json === "object" ? (json as { fonts?: unknown }).fonts : undefined) ?? [];
         const fonts = Array.isArray(fontsUnknown) ? fontsUnknown : [];

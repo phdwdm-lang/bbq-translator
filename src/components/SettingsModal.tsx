@@ -7,6 +7,8 @@ import { AccountTab } from "./settings/AccountTab";
 import { GeneralTab } from "./settings/GeneralTab";
 import { FontsTab } from "./settings/FontsTab";
 import { ExtensionsTab } from "./settings/ExtensionsTab";
+import { useTitleBarOverlay } from "../hooks/useTitleBarOverlay";
+import { TITLE_BAR_OVERLAY_TRANSPARENT, TITLE_BAR_SYMBOL_COLOR_MUTED } from "../constants/window";
 
 type TabKey = "account" | "general" | "shortcuts" | "extensions" | "fonts" | "about";
 
@@ -33,6 +35,12 @@ export function SettingsModal(props: { open: boolean; onClose: () => void; initi
     if (!open) return;
     if (props.initialTab) setActiveTab(props.initialTab);
   }, [open, props.initialTab]);
+
+  useTitleBarOverlay({
+    active: open,
+    color: TITLE_BAR_OVERLAY_TRANSPARENT,
+    symbolColor: TITLE_BAR_SYMBOL_COLOR_MUTED,
+  });
 
   const tabContent = useMemo(() => {
     const isTabOpen = open && activeTab;

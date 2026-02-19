@@ -7,7 +7,13 @@ import {
 import { CheckCircle2, LoaderCircle, XCircle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TopBar } from "../../components/TopBar";
-import { probeLang, renderMangaPage, resolveImageToBlob, scanMangaImage } from "../../lib/translateClient";
+import {
+  startTranslation,
+  updateTranslationProgress,
+  finishTranslation,
+  closeAndCleanupTask,
+  setTranslationModalOpen,
+} from "../../lib/translationProgress";
 import { deleteBlob, getBlob, putBlob } from "../../lib/blobDb";
 import { addPageToChapter, createChapter, clearEditorWorkspace, getAllBlobKeysFromChapter, getWorkspaceBlobKeys, loadEditorWorkspace, loadLibrary, QUICK_BOOK_ID, removeChapters, updatePageInChapter, updatePageInWorkspace, type MangaPage, type TextRegion } from "../../lib/storage";
 
@@ -22,9 +28,12 @@ import { useEditorState } from "../../hooks/useEditorState";
 import { useFileImport } from "../../hooks/useFileImport";
 import { naturalCompare, getBasename, sanitizeFolderName, makeTimestampName } from "../../lib/utils";
 import { TARGET_LANGUAGE_OPTIONS } from "../../constants/languages";
-import { DETECTION_SIZE_OPTIONS, INPAINTING_SIZE_OPTIONS } from "../../constants/editor";
+import { DETECTION_SIZE_OPTIONS, DIRECTION_HORIZONTAL, INPAINTING_SIZE_OPTIONS } from "../../constants/editor";
 import { OCR_OPTIONS, VALID_TRANSLATORS } from "../../constants/translate";
 import { useDialog } from "../../components/common/DialogProvider";
+import { resolveImageToBlob, renderMangaPage, probeLang, scanMangaImage } from "../../lib/translateClient";
+import { getBackendUrl } from "../../lib/env";
+import { normalizeDirection } from "../../lib/editorUtils";
 import dynamic from "next/dynamic";
 
 const EditorWorkspace = dynamic(() => import("../../components/editor/EditorWorkspace").then((m) => m.EditorWorkspace), {
@@ -73,6 +82,7 @@ function TranslatePageInner() {
     editorRegions, setEditorRegions,
     editingId, setEditingId,
     editingValue, setEditingValue,
+    selectedIds, setSelectedIds,
     editorImgNatural, setEditorImgNatural,
     editorScale, setEditorScale,
     editorProjectError, setEditorProjectError,
@@ -178,15 +188,7 @@ function TranslatePageInner() {
       if (rg.strikethrough) textDecorationParts.push("line-through");
       const textDecoration = textDecorationParts.length > 0 ? textDecorationParts.join(" ") : undefined;
 
-      let direction = (rg.direction ?? "").trim().toLowerCase();
-      if (!direction || direction === "auto") {
-        const [, , w, h] = rg.box;
-        direction = h > w * 1.35 ? "vertical" : "horizontal";
-      } else if (direction === "v" || direction === "vr") {
-        direction = "vertical";
-      } else if (direction === "h") {
-        direction = "horizontal";
-      }
+      const direction = normalizeDirection(rg.direction, rg.box);
 
       let align = (rg.alignment ?? "").trim().toLowerCase();
       if (align === "auto" || align === "") {
@@ -766,7 +768,6 @@ function TranslatePageInner() {
     }
   }, [bookIdFromQuery, chapterIdFromQuery, editorMode, editorPages, router]);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
   const handleOcrRegion = useCallback(async (rect: DrawingRect) => {
     if (!editorMode) return;
@@ -791,27 +792,105 @@ function TranslatePageInner() {
       formData.append("translator", translator);
       formData.append("translate", "true");
 
-      const res = await fetch(`${API_BASE}/ocr_region`, {
+      const res = await fetch(`${getBackendUrl()}/ocr_region`, {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
 
       if (data.status === "success") {
-        const newId = `${page.id}:${editorRegions.length}`;
+        // 使用当前页面regions数量生成唯一索引，避免删除后ID冲突
+        const currentPageRegions = editorPages[editorPageIndex]?.regions ?? [];
+        const newRegionIndex = currentPageRegions.length;
+        const newId = `${page.id}:${newRegionIndex}`;
+        const textContent = data.text_translated || data.text_original || "";
+        const originalText = data.text_original || "";
+        const regionBox: [number, number, number, number] = [
+          Math.round(rect.x),
+          Math.round(rect.y),
+          Math.round(rect.width),
+          Math.round(rect.height),
+        ];
+        const resolvedDirection = normalizeDirection(data.direction, regionBox);
+        
+        // 估算字体大小：根据框的尺寸计算合适的字体大小
+        const estimateFontSize = (boxWidth: number, boxHeight: number, text: string): number => {
+          if (!text || text.length === 0) return 24;
+          
+          const charCount = text.length;
+          const lineBreaks = (text.match(/\n/g) || []).length;
+          
+          // 判断文本方向：如果高度明显大于宽度，可能是竖排文本
+          const isVertical = boxHeight > boxWidth * 1.5;
+          
+          if (isVertical) {
+            // 竖排文本：字体大小约为框宽度的 70-80%
+            const sizeFromWidth = Math.round(boxWidth * 0.75);
+            // 也根据高度和字符数估算
+            const estimatedCols = Math.max(1, lineBreaks + 1);
+            const charsPerCol = Math.ceil(charCount / estimatedCols);
+            const sizeFromHeight = charsPerCol > 0 ? Math.round(boxHeight / charsPerCol * 0.9) : sizeFromWidth;
+            // 取较小值以确保文字能放入框内
+            const estimated = Math.min(sizeFromWidth, sizeFromHeight);
+            return Math.max(14, Math.min(72, estimated));
+          } else {
+            // 横排文本：估算行数和每行字符数
+            const estimatedLines = Math.max(1, lineBreaks + 1);
+            const charsPerLine = Math.ceil(charCount / estimatedLines);
+            
+            // 根据框高度和行数估算
+            const lineHeight = boxHeight / estimatedLines;
+            const sizeFromHeight = Math.round(lineHeight * 0.85);
+            
+            // 根据框宽度和每行字符数估算（中文字符宽度约等于字体大小）
+            const sizeFromWidth = charsPerLine > 0 ? Math.round(boxWidth / charsPerLine) : sizeFromHeight;
+            
+            // 取较大值（因为用户框选的区域通常比实际文本大）
+            // 但限制最大不超过框高度的一半
+            const maxFromBox = Math.round(boxHeight * 0.5);
+            const estimated = Math.min(Math.max(sizeFromHeight, sizeFromWidth), maxFromBox);
+            return Math.max(14, Math.min(72, estimated));
+          }
+        };
+        
+        // 优先使用后端返回的font_size，否则使用前端估算
+        const backendFontSize = data.font_size ? Number(data.font_size) : null;
+        const finalFontSize = backendFontSize && backendFontSize > 0 
+          ? backendFontSize 
+          : estimateFontSize(rect.width, rect.height, originalText);
+        
         const newRegion: EditorRegion = {
           id: newId,
-          regionIndex: editorRegions.length,
-          box: [Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), Math.round(rect.height)],
-          text: data.text_translated || data.text_original || "",
-          textOriginal: data.text_original || "",
-          fontSize: 16,
+          regionIndex: newRegionIndex,
+          box: regionBox,
+          text: textContent,
+          textOriginal: originalText,
+          fontSize: finalFontSize,
           fill: "#000000",
           fontFamily: "sans-serif",
           align: "left",
-          direction: "horizontal",
+          direction: resolvedDirection || DIRECTION_HORIZONTAL,
         };
         setEditorRegions([...editorRegions, newRegion]);
+        
+        // 同步到 editorPages 中对应页面的 regions 数组
+        const storageRegion = {
+          box: newRegion.box,
+          text_original: originalText,
+          text_translated: textContent,
+          font_size: finalFontSize,
+          fg_color: [0, 0, 0] as [number, number, number],
+          alignment: "left",
+          direction: newRegion.direction || DIRECTION_HORIZONTAL,
+        };
+        setEditorPages((prev) =>
+          prev.map((pp, idx) => {
+            if (idx !== editorPageIndex) return pp;
+            const nextRegs = [...(pp.regions ?? []), storageRegion];
+            return { ...pp, regions: nextRegs };
+          }),
+        );
+        
         setEditingId(newId);
         setEditingValue(newRegion.text);
         void showAlert({ title: "识别结果", message: `原文: ${data.text_original}\n译文: ${data.text_translated}` });
@@ -849,7 +928,7 @@ function TranslatePageInner() {
       formData.append("inpainter", inpainter || "lama_large");
       formData.append("inpainting_size", String(inpaintingSize || 2048));
 
-      const res = await fetch(`${API_BASE}/inpaint_region`, {
+      const res = await fetch(`${getBackendUrl()}/inpaint_region`, {
         method: "POST",
         body: formData,
       });
@@ -1108,6 +1187,8 @@ function TranslatePageInner() {
             regionIndex: idx,
             box: rg.box as [number, number, number, number],
             text: rg.text_translated || rg.text_original || "",
+            fontSize: rg.font_size,
+            fill: rg.fg_color ? `rgb(${rg.fg_color[0]}, ${rg.fg_color[1]}, ${rg.fg_color[2]})` : undefined,
           })),
         );
         if (res.imageSize && res.imageSize.length === 2) {
@@ -1238,9 +1319,6 @@ function TranslatePageInner() {
 
   const deleteRegion = useCallback(
     (id: string) => {
-      // Remove from editorRegions
-      setEditorRegions((prev) => prev.filter((r) => r.id !== id));
-      
       // Clear selection if deleted region was selected
       if (editingId === id) {
         setEditingId(null);
@@ -1262,19 +1340,71 @@ function TranslatePageInner() {
             return { ...p, regions: regs };
           });
 
-        setEditorPages((prev) =>
-          prev.map((pp) => {
+        // 更新 editorPages 并重新同步 editorRegions
+        setEditorPages((prev) => {
+          const updated = prev.map((pp) => {
             if (pp.id !== page.id) return pp;
             const nextRegs = (pp.regions ?? []).slice();
             nextRegs.splice(regionIdx, 1);
             return { ...pp, regions: nextRegs };
-          }),
-        );
+          });
+          
+          // 从更新后的 editorPages 重建 editorRegions，确保ID同步
+          const updatedPage = updated[editorPageIndex];
+          if (updatedPage) {
+            const newEditorRegions = (updatedPage.regions ?? []).map((rg, idx) => {
+              const fgColor = rg.fg_color;
+              const fill = fgColor ? `rgb(${fgColor[0]}, ${fgColor[1]}, ${fgColor[2]})` : undefined;
+              const fontStyleParts: string[] = [];
+              if (rg.bold) fontStyleParts.push("bold");
+              if (rg.italic) fontStyleParts.push("italic");
+              const fontStyle = fontStyleParts.length > 0 ? fontStyleParts.join(" ") : undefined;
+              const textDecorationParts: string[] = [];
+              if (rg.underline) textDecorationParts.push("underline");
+              if (rg.strikethrough) textDecorationParts.push("line-through");
+              const textDecoration = textDecorationParts.length > 0 ? textDecorationParts.join(" ") : undefined;
+              let direction = (rg.direction ?? "").trim().toLowerCase();
+              if (!direction || direction === "auto") {
+                const [, , w, h] = rg.box;
+                direction = h > w * 1.35 ? "vertical" : "horizontal";
+              } else if (direction === "v" || direction === "vr") {
+                direction = "vertical";
+              } else if (direction === "h") {
+                direction = "horizontal";
+              }
+              let align = (rg.alignment ?? "").trim().toLowerCase();
+              if (align === "auto" || align === "") align = "left";
+              else if (align !== "left" && align !== "center" && align !== "right") align = "left";
+              
+              return {
+                id: `${updatedPage.id}:${idx}`,
+                regionIndex: idx,
+                box: rg.box,
+                text: rg.text_translated || "",
+                textOriginal: rg.text_original || "",
+                fontSize: rg.font_size,
+                fill,
+                fontFamily: rg.font_family,
+                fontStyle,
+                textDecoration,
+                align,
+                lineHeight: rg.line_spacing,
+                letterSpacing: rg.letter_spacing,
+                direction,
+                strokeColor: rg.stroke_color,
+                strokeWidth: rg.stroke_width,
+              };
+            });
+            setEditorRegions(newEditorRegions);
+          }
+          
+          return updated;
+        });
       } catch (e) {
         console.error("Failed to delete region", e);
       }
     },
-    [editorMode, editorPages, editorPageIndex, editingId, bookIdFromQuery, chapterIdFromQuery],
+    [editorMode, editorPages, editorPageIndex, editingId],
   );
 
   // Keyboard event listener for Delete key
@@ -1414,6 +1544,8 @@ function TranslatePageInner() {
     const handleEditorBack = async () => {
       const ok = await showConfirm({ title: "确认返回", message: "确定要返回上级页面吗？" });
       if (!ok) return;
+      // 返回前关闭进度弹窗
+      setTranslationModalOpen(false);
       if (window.history.length > 1) {
         router.back();
         return;
@@ -1470,11 +1602,54 @@ function TranslatePageInner() {
               imageUrl={editorShowOriginal ? originalUrl : editorBaseUrl}
               regions={editorRegions}
               selectedId={editingId}
-              onSelect={(id) => {
-                setEditingId(id);
-                if (id) {
-                  const region = editorRegions.find((r) => r.id === id);
+              selectedIds={selectedIds}
+              onSelect={(id, options) => {
+                if (options?.ctrlKey && id) {
+                  // Ctrl+click: toggle selection
+                  setSelectedIds((prev) => {
+                    const isRemoving = prev.includes(id);
+                    const newIds = isRemoving ? prev.filter((i) => i !== id) : [...prev, id];
+                    
+                    // Update editingId based on remaining selection
+                    if (isRemoving) {
+                      // If removing, set editingId to last remaining item
+                      const lastId = newIds.length > 0 ? newIds[newIds.length - 1] : null;
+                      setEditingId(lastId);
+                      if (lastId) {
+                        const region = editorRegions.find((r) => r.id === lastId);
+                        if (region) setEditingValue(region.text);
+                      } else {
+                        setEditingValue("");
+                      }
+                    } else {
+                      // If adding, set editingId to the newly added item
+                      setEditingId(id);
+                      const region = editorRegions.find((r) => r.id === id);
+                      if (region) setEditingValue(region.text);
+                    }
+                    
+                    return newIds;
+                  });
+                } else {
+                  // Normal click: single select
+                  setSelectedIds(id ? [id] : []);
+                  setEditingId(id);
+                  if (id) {
+                    const region = editorRegions.find((r) => r.id === id);
+                    if (region) setEditingValue(region.text);
+                  }
+                }
+              }}
+              onSelectMultiple={(ids) => {
+                setSelectedIds(ids);
+                if (ids.length > 0) {
+                  const lastId = ids[ids.length - 1];
+                  setEditingId(lastId);
+                  const region = editorRegions.find((r) => r.id === lastId);
                   if (region) setEditingValue(region.text);
+                } else {
+                  setEditingId(null);
+                  setEditingValue("");
                 }
               }}
               onChangeRegion={(id, newBox, newText) => updateRegion(id, newBox, newText)}
@@ -1493,14 +1668,25 @@ function TranslatePageInner() {
         right={
           <EditorPanelRight
             selectedRegion={selectedRegion}
+            selectedIds={selectedIds}
             allRegions={editorRegions}
             onRegionChange={updateRegionWithPatch}
+            onBatchRegionChange={(ids, patch) => {
+              ids.forEach((id) => updateRegionWithPatch(id, patch));
+            }}
             onRegionSelect={(id) => {
               setEditingId(id);
+              setSelectedIds([id]);
               const region = editorRegions.find((r) => r.id === id);
               if (region) setEditingValue(region.text);
             }}
             onRegionDelete={deleteRegion}
+            onBatchDelete={(ids) => {
+              ids.forEach((id) => deleteRegion(id));
+              setSelectedIds([]);
+              setEditingId(null);
+              setEditingValue("");
+            }}
             onReOcr={async (id) => {
               const region = editorRegions.find((r) => r.id === id);
               if (!region) return;
@@ -1522,13 +1708,20 @@ function TranslatePageInner() {
                 formData.append("target_lang", targetLanguage);
                 formData.append("translator", translator);
                 formData.append("translate", "true");
-                const res = await fetch(`${API_BASE}/ocr_region`, { method: "POST", body: formData });
+                const res = await fetch(`${getBackendUrl()}/ocr_region`, { method: "POST", body: formData });
                 const data = await res.json();
                 if (data.status === "success") {
-                  updateRegionWithPatch(id, {
+                  const resolvedDirection = normalizeDirection(data.direction, region.box);
+                  const backendFontSize = data.font_size ? Number(data.font_size) : null;
+                  const nextPatch: Partial<EditorRegion> = {
                     textOriginal: data.text_original || "",
                     text: data.text_translated || data.text_original || "",
-                  });
+                    direction: resolvedDirection,
+                  };
+                  if (backendFontSize && backendFontSize > 0) {
+                    nextPatch.fontSize = backendFontSize;
+                  }
+                  updateRegionWithPatch(id, nextPatch);
                 } else {
                   setEditorProjectError(data.message || "重新识别失败");
                 }
@@ -1543,7 +1736,7 @@ function TranslatePageInner() {
                 return;
               }
               try {
-                const response = await fetch(`${API_BASE}/translate_text`, {
+                const response = await fetch(`${getBackendUrl()}/translate_text`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({

@@ -79,6 +79,7 @@ export const TRANSLATOR_CREDENTIALS: TranslatorCredentialConfig[] = [
         label: "API Key（可选）",
         placeholder: "ollama",
         type: "password",
+        headerName: "x-custom-openai-api-key",
       },
       {
         key: "apiBase",
@@ -86,6 +87,7 @@ export const TRANSLATOR_CREDENTIALS: TranslatorCredentialConfig[] = [
         label: "API Base",
         placeholder: "http://localhost:11434/v1",
         type: "text",
+        headerName: "x-custom-openai-api-base",
       },
       {
         key: "model",
@@ -93,6 +95,7 @@ export const TRANSLATOR_CREDENTIALS: TranslatorCredentialConfig[] = [
         label: "Model",
         placeholder: "qwen2.5:7b",
         type: "text",
+        headerName: "x-custom-openai-model",
       },
     ],
   },
@@ -107,6 +110,7 @@ export const TRANSLATOR_CREDENTIALS: TranslatorCredentialConfig[] = [
         label: "API Key",
         placeholder: "gsk_...",
         type: "password",
+        headerName: "x-groq-api-key",
       },
       {
         key: "model",
@@ -114,10 +118,55 @@ export const TRANSLATOR_CREDENTIALS: TranslatorCredentialConfig[] = [
         label: "Model（可选）",
         placeholder: "mixtral-8x7b-32768",
         type: "text",
+        headerName: "x-groq-model",
       },
     ],
   },
 ];
+
+const TRANSLATOR_TO_PROVIDER: Record<string, string> = {
+  deepseek: "deepseek",
+  gemini: "gemini",
+  gemini_2stage: "gemini",
+  groq: "groq",
+  chatgpt: "deepseek",
+  chatgpt_2stage: "deepseek",
+  custom_openai: "custom_openai",
+};
+
+const NO_KEY_TRANSLATORS = new Set([
+  "google", "youdao", "baidu", "deepl", "papago", "caiyun", "none", "original",
+]);
+
+export function getProviderForTranslator(translatorId: string): string | null {
+  if (NO_KEY_TRANSLATORS.has(translatorId)) return null;
+  return TRANSLATOR_TO_PROVIDER[translatorId] ?? null;
+}
+
+export function isApiKeyConfigured(translatorId: string): boolean {
+  const providerId = getProviderForTranslator(translatorId);
+  if (!providerId) return true;
+
+  const config = TRANSLATOR_CREDENTIALS.find((c) => c.id === providerId);
+  if (!config) return true;
+
+  const apiKeyField = config.fields.find((f) => f.key === "apiKey");
+  if (!apiKeyField) return true;
+
+  try {
+    const value = String(localStorage.getItem(apiKeyField.storageKey) || "").trim();
+    return value.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function getProviderDisplayName(translatorId: string): string {
+  const providerId = getProviderForTranslator(translatorId);
+  if (!providerId) return translatorId;
+  const config = TRANSLATOR_CREDENTIALS.find((c) => c.id === providerId);
+  return config?.name ?? providerId;
+}
 
 export function loadCredentialHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};

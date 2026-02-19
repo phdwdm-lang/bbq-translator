@@ -88,22 +88,6 @@ export function AppShell({ title, backHref, breadcrumbs, headerActions, children
           </nav>
           <div className="flex items-center gap-4">
             {headerActions}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="搜索..."
-                className="pl-9 pr-4 py-2 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-lg text-sm w-64 transition-all outline-none"
-              />
-            </div>
-            <button
-              type="button"
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors relative"
-              onClick={() => alert({ title: "提示", message: "通知功能暂未开放" })}
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-            </button>
           </div>
         </header>
 

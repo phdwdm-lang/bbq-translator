@@ -1,0 +1,4 @@
+export const TITLE_BAR_OVERLAY_TRANSPARENT = "transparent";
+export const TITLE_BAR_SYMBOL_COLOR_DEFAULT = "#475569";
+export const TITLE_BAR_SYMBOL_COLOR_MUTED = "#94a3b8";
+export const TITLE_BAR_OVERLAY_HEIGHT = 40;
