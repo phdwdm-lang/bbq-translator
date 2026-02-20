@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home as HomeIcon, Library, Settings, Smile } from "lucide-react";
+import { Home as HomeIcon, Library, Settings } from "lucide-react";
 import { useDialog } from "../common/DialogProvider";
 
 interface SidebarProps {
@@ -23,9 +23,9 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       <div>
         <div className="flex items-center gap-3 px-3 mb-8 mt-2">
           <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-200">
-            M
+            B
           </div>
-          <span className="font-bold text-xl tracking-tight text-slate-800">MangaTrans</span>
+          <span className="font-bold text-xl tracking-tight text-slate-800">BBQ Translator</span>
         </div>
 
         <nav className="space-y-1">
@@ -48,13 +48,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       </div>
 
       <div>
-        <div className="px-6 pb-6 pt-2">
-          <div className="relative w-full aspect-square rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
-            <Smile className="w-8 h-8 mb-2" />
-            <span className="text-[10px] text-center px-2">Sidebar Mascot<br />(200×200)</span>
-          </div>
-        </div>
-
         <nav className="space-y-1 border-t border-slate-100 pt-4">
           <button
             type="button"

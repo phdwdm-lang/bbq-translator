@@ -1,4 +1,4 @@
-# BBQ Translator - Project Status (Scratchpad)
+﻿# BBQ Translator - Project Status (Scratchpad)
 
 ## 📍 Current Phase (当前阶段)
 - [x] Phase 0: 工程基础 (Electron 主进程、预加载脚本、环境感知层、存储适配层)
@@ -20,7 +20,8 @@
 - **文档位置**：6 份规范文档均在 `docs/spec_document/`
 - **翻译 API**：DeepSeek / Gemini / Custom OpenAI / Groq — Key 存 localStorage，通过请求头传递，不经后端持久化
 - **OCR 引擎（核心包内置）**：`32px` / `48px` / `48px_ctc`；MangaOCR 为拓展模块按需安装
-- **拓展模块**：mocr / lama_large / cuda — 通过拓展中心在线下载或离线导入
+
+- **UI 优化**：首页拖拽上传区引入 AI 生成的日系粉彩 Q 版吉祥物引导图，使用 mix-blend-multiply 实现无缝融合。
 
 ## 📋 Backlog / Next Steps (待办事项)
 
@@ -36,6 +37,8 @@
 - [ ] React ErrorBoundary + Electron 崩溃重启友好页面
 - [ ] 统一日志体系（后端 → `data/logs/backend.log`）
 - [ ] 首次启动引导流程（API Key 配置引导）
+- [ ] 优化apikey配置验证失败时的提示
+- [ ] 修复目前章节详情页返回列表页会自动回到页面顶部的问题
 - [ ] 内存峰值监控（`/health` 返回 `memory_mb`，前端警告）
 - [ ] 大图片自动缩放保护（超过 4096×4096 自动缩）
 

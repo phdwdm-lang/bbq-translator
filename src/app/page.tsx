@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Flame, Upload, HelpCircle, FileImage, Settings as SettingsIcon, Image as ImageIcon, CheckCircle2 } from "lucide-react";
+import { ChevronRight, Upload, HelpCircle, FileImage, Settings as SettingsIcon, Image as ImageIcon, CheckCircle2 } from "lucide-react";
 import { AppShell } from "../components/layout/AppShell";
 
 import { importToImages, makeTaskFolderName } from "../lib/importExtract";
@@ -132,7 +132,8 @@ export default function Home() {
     } catch (err: unknown) {
       let message = err instanceof Error ? err.message : String(err ?? "Failed");
       if (isMissingApiKeyError(err)) {
-        message = "API Key 缺失或无效，请在设置 → 账号中配置";
+        const providerLabel = err.provider && err.provider !== "unknown" ? `【${err.provider}】` : "";
+        message = `${providerLabel}API Key 未配置或已失效，请在设置 → 账号中检查 Key 是否正确及余额是否充足`;
       }
       finishTranslation(editorTaskId, message === TRANSLATION_STAGE_CANCELED ? TRANSLATION_STAGE_CANCELED : TRANSLATION_STAGE_FAILED, { error: message });
 
@@ -395,7 +396,6 @@ export default function Home() {
     return new Blob([bytes], { type: mime });
   };
 
-
   const dropImport = async (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
     const items = Array.from(e.dataTransfer.items ?? []);
@@ -611,7 +611,8 @@ export default function Home() {
           if (aborter.signal.aborted) throw new Error("已取消");
           if (isMissingApiKeyError(pageErr)) {
             apiKeyError = true;
-            throw new Error(`API Key 缺失或无效，请在设置 → 账号中检查配置或额度`);
+            const providerLabel = pageErr.provider && pageErr.provider !== "unknown" ? `【${pageErr.provider}】` : "";
+            throw new Error(`${providerLabel}API Key 未配置或已失效，请在设置 → 账号中检查 Key 是否正确及余额是否充足`);
           }
           failedCount += 1;
         }
@@ -724,48 +725,69 @@ export default function Home() {
         <div className="view-section max-w-6xl mx-auto space-y-10 pb-10">
           {/* ── Hero Section ── */}
           <section>
-            <div className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 shadow-xl shadow-indigo-100/50">
-              <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-60" />
-              <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-orange-50 rounded-full blur-3xl opacity-60" />
+            <div
+              className="bg-white rounded-xl shadow-[0_8px_40px_-8px_rgba(0,0,0,0.10)] border border-slate-100 w-full flex flex-row items-stretch"
+              style={{ overflow: "visible" }}
+            >
+              {/* Left Column: Text Area (40%) */}
+              <div className="w-[40%] flex flex-col justify-center items-start space-y-3 pl-8 pr-5 py-7">
+                <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-[#FFF7ED] text-[#EA580C] text-xs font-bold tracking-wide">
+                  投喂生肉区
+                </div>
+                <h2 className="text-[1.5rem] font-black text-[#0F172A] tracking-tight leading-[1.2]">
+                  准备好开始料理了吗？
+                </h2>
+                <p className="text-[#64748B] text-[13px] leading-relaxed font-medium">
+                  上传生肉漫画，自动去字、翻译、嵌字，为您端上热腾腾的熟肉。
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => void openImportDialog()}
+                    className="bg-[#0F172A] hover:bg-[#1E293B] text-white px-5 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-2 transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    <Upload className="w-4 h-4" />
+                    上传生肉
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 px-5 py-2.5 rounded-2xl text-sm font-bold transition-all hover:bg-slate-50"
+                  >
+                    导入文件夹
+                  </button>
+                </div>
+              </div>
 
-              <div className="relative p-10 flex flex-col md:flex-row items-center justify-between gap-12">
-                <div className="flex-1 text-center md:text-left z-10">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-bold mb-4">
-                    <Flame className="w-3 h-3" /> 投喂生肉区
-                  </div>
-                  <h2 className="text-3xl font-bold mb-3 text-slate-800">准备好开始料理了吗？</h2>
-                  <p className="text-slate-500 mb-8 max-w-md leading-relaxed">
-                    上传生肉 (Raw) 漫画，自动去字、翻译、嵌字，为您端上热腾腾的熟肉 (Cooked)。
-                  </p>
-                  <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-                    <button
-                      type="button"
-                      onClick={() => void openImportDialog()}
-                      className="bg-slate-900 text-white hover:bg-slate-800 px-6 py-3 rounded-xl font-semibold shadow-lg shadow-slate-900/20 transition-all flex items-center gap-2 group"
-                    >
-                      <Upload className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" />
-                      上传生肉
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => folderInputRef.current?.click()}
-                      className="bg-white text-slate-600 hover:bg-slate-50 px-6 py-3 rounded-xl font-semibold transition-all border border-slate-200"
-                    >
-                      导入文件夹
-                    </button>
-                  </div>
+              {/* Right Column: Drop Zone (60%) */}
+              <div
+                className="w-[60%] m-4 rounded-[1.5rem] border-2 border-dashed border-[#C7D2FE] bg-[#F5F7FF] hover:border-[#818CF8] transition-colors duration-300 relative flex items-center group cursor-pointer"
+                style={{ overflow: "visible" }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={dropImport}
+                onClick={() => void openImportDialog()}
+              >
+                {/* Mascot: fills full dropzone height */}
+                <div className="absolute top-0 bottom-0 left-[-15px] z-10 pointer-events-none float-on-hover">
+                  <img
+                    src="/images/mascot-dropzone.png"
+                    alt="Mascot"
+                    className="h-full w-auto object-contain"
+                    style={{ filter: "drop-shadow(0 10px 30px rgba(99, 102, 241, 0.18))" }}
+                  />
                 </div>
 
-                <div
-                  className="w-full md:w-96 h-64 relative flex items-center justify-center border-2 border-dashed border-indigo-200 bg-indigo-50/30 rounded-2xl text-indigo-400 cursor-pointer hover:border-indigo-300 transition-colors"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={dropImport}
-                  onClick={() => void openImportDialog()}
-                >
-                  <div className="flex flex-col items-center">
-                    <ImageIcon className="w-12 h-12 mb-3" />
-                    <span className="font-bold">拖拽文件到此处</span>
-                    <span className="text-xs mt-1 text-indigo-300">支持 Epub / Zip / PDF / CBR / RAR / 图片</span>
+                {/* Drop Zone Content: pinned to right edge */}
+                <div className="absolute right-6 top-0 bottom-0 w-[240px] flex flex-col items-center justify-center z-10">
+                  <div className="w-14 h-14 rounded-[1rem] bg-white text-[#6366F1] flex items-center justify-center shadow-[0_8px_20px_-4px_rgba(99,102,241,0.2)] mb-4 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                    <ImageIcon className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-[#334155] mb-2 tracking-tight group-hover:text-[#4F46E5] transition-colors">
+                    拖拽文件到此处
+                  </h3>
+                  <div className="text-sm text-[#94A3B8] font-medium text-center leading-6">
+                    <p>支持 Epub / Zip / PDF</p>
+                    <p>CBR / RAR 或 图片文件夹</p>
                   </div>
                 </div>
               </div>

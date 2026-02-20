@@ -373,7 +373,7 @@ export default function ChapterDetailPage(props: { params: Promise<{ bookId: str
                   )}
                 </div>
                 <button
-                  onClick={() => router.push(`/shelf/${encodeURIComponent(bookId)}`)}
+                  onClick={() => window.history.length > 1 ? router.back() : router.push(`/shelf/${encodeURIComponent(bookId)}`)}
                   className="text-sm text-indigo-400 hover:underline mt-2"
                 >
                   返回章节列表

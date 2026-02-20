@@ -5,8 +5,8 @@ import { X, Puzzle, UserCircle, Settings as SettingsIcon, Keyboard, Info, Type }
 
 import { AccountTab } from "./settings/AccountTab";
 import { GeneralTab } from "./settings/GeneralTab";
-import { FontsTab } from "./settings/FontsTab";
 import { ExtensionsTab } from "./settings/ExtensionsTab";
+import { AboutTab } from "./settings/AboutTab";
 import { useTitleBarOverlay } from "../hooks/useTitleBarOverlay";
 import { TITLE_BAR_OVERLAY_TRANSPARENT, TITLE_BAR_SYMBOL_COLOR_MUTED } from "../constants/window";
 
@@ -50,9 +50,11 @@ export function SettingsModal(props: { open: boolean; onClose: () => void; initi
       case "general":
         return <GeneralTab />;
       case "fonts":
-        return <FontsTab open={open && activeTab === "fonts"} />;
+        return <div className="text-xs font-black text-black/60">该功能暂未开放</div>;
       case "extensions":
         return <ExtensionsTab open={open && activeTab === "extensions"} focusExtensionId={props.focusExtensionId} />;
+      case "about":
+        return <AboutTab />;
       default:
         return <div className="text-xs font-black text-black/60">该功能暂未开放</div>;
     }
