@@ -40,13 +40,24 @@
 
 ## 🛠️ 开发环境搭建
 
-本项目为 **Electron + Next.js** 桌面应用，前端与嵌入式 Python 后端配合运行。
+本项目为 **Electron + Next.js** 桌面应用，前端与嵌入式 Python 后端配合运行。  
+后端代码以 **Git Submodule** 的形式包含在 `backend/` 目录中。
+
+### 克隆项目（含后端子模块）
+
+```bash
+git clone --recurse-submodules https://github.com/phdwdm-lang/manga-studio.git
+```
+
+> 如已克隆但未拉取子模块：
+> ```bash
+> git submodule update --init --recursive
+> ```
 
 ### 前置依赖
 
 - Node.js 18+
 - Python 3.10–3.11（仅开发时需要，生产包含嵌入式 Python）
-- 后端 Python 依赖（`manga-backend` 项目）
 
 ### 安装前端依赖
 
@@ -57,8 +68,8 @@ npm install
 ### 开发模式（浏览器，连接外部 Python 后端）
 
 ```bash
-# 先启动后端（在 manga-backend 目录）
-python start_backend.py
+# 先启动后端（在 backend/ 目录）
+python backend/start_backend.py
 
 # 再启动前端
 npm run dev
@@ -165,7 +176,7 @@ nextjs-tailwind-app/
 
 ## 🔗 相关仓库
 
-- **后端（Python AI 管线）**：[manga-image-translator](https://github.com/phdwdm-lang/manga-image-translator)
+- **后端（Python AI 管线）**：[manga-image-translator](https://github.com/phdwdm-lang/manga-image-translator)（已作为 `backend/` submodule 引入）
 
 ---
 

@@ -1,5 +1,5 @@
-appId: com.mangatrans.studio
-productName: MangaTrans Studio
+appId: com.bbq.translator
+productName: BBQ Translator
 copyright: Copyright © 2026
 
 directories:
@@ -28,7 +28,7 @@ extraResources:
     filter:
       - "**/*"
   # Backend (CPU-lite: ~150 MB after filtering)
-  - from: "../manga-backend"
+  - from: "backend"
     to: "backend"
     filter:
       - "**/*"
@@ -108,7 +108,7 @@ nsis:
   installerHeaderIcon: build/icon.ico
   deleteAppDataOnUninstall: false
   artifactName: "${productName}-Setup-${version}.${ext}"
-  shortcutName: MangaTrans Studio
+  shortcutName: BBQ Translator
   installerLanguages:
     - zh_CN
     - en_US

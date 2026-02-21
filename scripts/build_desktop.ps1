@@ -20,10 +20,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$BackendDir = Join-Path (Split-Path -Parent $ProjectRoot) "manga-backend"
+$BackendDir = Join-Path $ProjectRoot "backend"
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host " MangaTrans Studio Desktop Build" -ForegroundColor Cyan
+Write-Host " BBQ Translator Desktop Build" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "Project: $ProjectRoot"
 Write-Host "Backend: $BackendDir"
