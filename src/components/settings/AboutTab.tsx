@@ -28,7 +28,7 @@ export function AboutTab() {
         <div className="flex justify-center">
           <div className="relative w-48 h-48 rounded-2xl overflow-hidden border border-slate-100 shadow-sm bg-slate-50">
             <Image
-              src="/images/qq-qrcode.png"
+              src="/images/qq_group.png"
               alt="QQ交流群二维码"
               fill
               className="object-contain p-2"

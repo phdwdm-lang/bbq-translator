@@ -17,17 +17,17 @@
 
 ---
 
-## � 交流与反馈
+## 💬 交流与反馈
 
 遇到问题或想交流使用心得？欢迎扫码加入官方 QQ 交流群：
 
 <p align="center">
-  <img src="public/images/qq-qrcode.png" alt="QQ交流群二维码" width="180" />
+  <img src="public/images/qq_group.png" alt="QQ交流群二维码" width="180" />
 </p>
 
 ---
 
-## �📦 安装使用（终端用户）
+## 📦 安装使用（终端用户）
 
 从 [Releases](https://github.com/phdwdm-lang/manga-studio/releases) 下载最新的 `.exe` 安装包，双击安装，开箱即用。
 
