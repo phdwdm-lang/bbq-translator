@@ -17,7 +17,17 @@
 
 ---
 
-## 📦 安装使用（终端用户）
+## � 交流与反馈
+
+遇到问题或想交流使用心得？欢迎扫码加入官方 QQ 交流群：
+
+<p align="center">
+  <img src="public/images/qq-qrcode.png" alt="QQ交流群二维码" width="180" />
+</p>
+
+---
+
+## �📦 安装使用（终端用户）
 
 从 [Releases](https://github.com/phdwdm-lang/manga-studio/releases) 下载最新的 `.exe` 安装包，双击安装，开箱即用。
 
@@ -76,7 +86,12 @@ npm run dev:all
 npm run build:desktop
 ```
 
-构建产物位于 `dist/` 目录，包含 NSIS `.exe` 安装程序。
+构建产物位于 `dist/` 目录，包含 `.zip` 压缩包（当前配置）。
+
+> **重新生成应用图标**：若需更新 `build/icon.ico`，运行：
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File scripts/generate-icon.ps1
+> ```
 
 > **注意**：构建前需确保 `resources/python/` 目录包含嵌入式 Python 环境，`resources/backend/` 包含后端代码与预置模型。  
 > 参考：`scripts/build_embedded_python.ps1` 和 `scripts/build_desktop.ps1`
