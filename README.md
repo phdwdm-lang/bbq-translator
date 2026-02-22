@@ -156,22 +156,6 @@ nextjs-tailwind-app/
 | Python 后端 | FastAPI + uvicorn + PyTorch 2.6.0+cpu |
 | 本地存储 | localStorage + IndexedDB（无服务端数据库） |
 
-完整版本清单见 [`docs/spec_document/TECH_STACK.md`](docs/spec_document/TECH_STACK.md)。
-
----
-
-## 📄 项目文档
-
-| 文档 | 说明 |
-|------|------|
-| [PRD.md](docs/spec_document/PRD.md) | 产品需求规格 |
-| [APP_FLOW.md](docs/spec_document/APP_FLOW.md) | 用户流程与页面导航 |
-| [TECH_STACK.md](docs/spec_document/TECH_STACK.md) | 技术栈版本清单 |
-| [FRONTEND_GUIDELINES.md](docs/spec_document/FRONTEND_GUIDELINES.md) | 设计系统与组件规范 |
-| [BACKEND_STRUCTURE.md](docs/spec_document/BACKEND_STRUCTURE.md) | API 与数据模型蓝图 |
-| [IMPLEMENTATION_PLAN.md](docs/spec_document/IMPLEMENTATION_PLAN.md) | 构建阶段路线图 |
-| [scratchpad.md](docs/scratchpad/scratchpad.md) | 项目实时进度追踪 |
-
 ---
 
 ## 🔗 相关仓库

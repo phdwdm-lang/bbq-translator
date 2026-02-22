@@ -40,6 +40,18 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
 # desktop build
 /dist
 /build/python
+
+# project docs (AI-DD internal)
+/docs
+
+# IDE config
+.windsurf/
+
+# temp / demo files
+ai-bg.png
+dropzone-demo*.html
+update_demo*.py
