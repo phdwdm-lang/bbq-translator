@@ -29,7 +29,7 @@
 
 ## 📦 安装使用（终端用户）
 
-从 [Releases](https://github.com/phdwdm-lang/manga-studio/releases) 下载最新的 `.exe` 安装包，双击安装，开箱即用。
+从 [Releases](https://github.com/phdwdm-lang/bbq-translator/releases) 下载最新的 `.exe` 安装包，双击安装，开箱即用。
 
 **最低硬件要求**：
 - Windows 10 / 11 (64-bit)
@@ -46,7 +46,7 @@
 ### 克隆项目（含后端子模块）
 
 ```bash
-git clone --recurse-submodules https://github.com/phdwdm-lang/manga-studio.git
+git clone --recurse-submodules https://github.com/phdwdm-lang/bbq-translator.git
 ```
 
 > 如已克隆但未拉取子模块：
