@@ -7,41 +7,6 @@ import { StrokeSection } from "./StrokeSection";
 import { CustomSelect } from "../common/CustomSelect";
 import { useDialog } from "../common/DialogProvider";
 
-const TARGET_LANG_OPTIONS = [
-  { value: "CHS", label: "简体中文" },
-  { value: "ENG", label: "English" },
-  { value: "JPN", label: "日本語" },
-];
-
-const DETECTION_SIZE_OPTIONS = [
-  { value: "1024", label: "1024px" },
-  { value: "1536", label: "1536px (推荐)" },
-  { value: "2048", label: "2048px" },
-];
-
-const DETECTOR_OPTIONS = [
-  { value: "ctd", label: "CTD (推荐)" },
-  { value: "craft", label: "CRAFT" },
-  { value: "default", label: "Default" },
-];
-
-const TRANSLATOR_OPTIONS = [
-  { value: "deepseek", label: "DeepSeek" },
-  { value: "openai", label: "OpenAI" },
-  { value: "有道翻译", label: "有道翻译" },
-];
-
-const INPAINTER_OPTIONS = [
-  { value: "lama_mpe", label: "Lama MPE (推荐)" },
-  { value: "lama_large", label: "Lama Large" },
-];
-
-const INPAINT_SIZE_OPTIONS = [
-  { value: "1024", label: "1024px" },
-  { value: "2048", label: "2048px (推荐)" },
-  { value: "4096", label: "4096px" },
-];
-
 const COLOR_PRESETS = [
   { color: "#000000", border: "border-slate-200" },
   { color: "#FFFFFF", border: "border-slate-300" },
@@ -67,7 +32,7 @@ interface EditorPanelRightProps {
 
 export function EditorPanelRight({ selectedRegion, selectedIds, allRegions, onRegionChange, onBatchRegionChange, onRegionSelect, onRegionDelete, onBatchDelete, onRetranslate, onReOcr }: EditorPanelRightProps) {
   const isMultiSelect = selectedIds.length > 1;
-  const [activeTab, setActiveTab] = useState<"global" | "text">("text");
+  const [activeTab, setActiveTab] = useState<"global" | "text">("text"); // global tab hidden — pending implementation
   const selectedRegionRef = useRef<HTMLDivElement>(null);
   const { fontOptions, defaultFontValue, ensureRegionFont } = useFontOptions(allRegions, onRegionChange);
   const { confirm } = useDialog();
@@ -110,79 +75,17 @@ export function EditorPanelRight({ selectedRegion, selectedIds, allRegions, onRe
 
   return (
     <div className="flex flex-col h-full">
-      {/* Tabs */}
+      {/* Tabs — global tab hidden, pending full implementation */}
       <div className="flex border-b border-slate-200 shrink-0">
-        <button
-          onClick={() => setActiveTab("global")}
-          className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-            activeTab === "global" ? "text-indigo-600 border-indigo-600" : "text-slate-500 hover:text-slate-700 border-transparent"
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          全局设置
-        </button>
-        <button
-          onClick={() => setActiveTab("text")}
-          className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-            activeTab === "text" ? "text-indigo-600 border-indigo-600" : "text-slate-500 hover:text-slate-700 border-transparent"
-          }`}
-        >
+        <div className="flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 border-b-2 text-indigo-600 border-indigo-600">
           <Type className="w-4 h-4" />
           文本编辑
-        </button>
+        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        {activeTab === "global" && (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">翻译控制</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 mb-1 block">目标语言</label>
-                  <CustomSelect options={TARGET_LANG_OPTIONS} value="CHS" onChange={() => {}} size="sm" />
-                </div>
-                
-                <button className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm transition-colors">
-                  全局翻译 (所有页)
-                </button>
-                <button className="w-full py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 shadow-sm transition-colors">
-                  仅翻译当前页
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">高级设置</h3>
-                <Settings className="w-3 h-3 text-slate-400" />
-              </div>
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 mb-1 block">检测分辨率</label>
-                  <CustomSelect options={DETECTION_SIZE_OPTIONS} value="1536" onChange={() => {}} size="sm" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 mb-1 block">文本检测器</label>
-                  <CustomSelect options={DETECTOR_OPTIONS} value="ctd" onChange={() => {}} size="sm" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 mb-1 block">翻译引擎</label>
-                  <CustomSelect options={TRANSLATOR_OPTIONS} value="deepseek" onChange={() => {}} size="sm" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 mb-1 block">修图模型</label>
-                  <CustomSelect options={INPAINTER_OPTIONS} value="lama_mpe" onChange={() => {}} size="sm" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 mb-1 block">修复尺寸</label>
-                  <CustomSelect options={INPAINT_SIZE_OPTIONS} value="2048" onChange={() => {}} size="sm" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* global tab content hidden — pending implementation */}
 
         {activeTab === "text" && (
           <div className="space-y-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, use as usePromise, type ChangeEvent, type DragEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use as usePromise, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Upload, X, Check, MoreHorizontal, Pencil, Image as ImageIcon, Trash2, Import } from "lucide-react";
 import { AppShell } from "../../../components/layout/AppShell";
@@ -38,6 +38,7 @@ import { ProgressModal } from "../../../components/common/ProgressModal";
 import { ConfirmDialog } from "../../../components/common/ConfirmDialog";
 import { Pagination } from "../../../components/common/Pagination";
 import { DETECTION_RESOLUTION, INPAINTING_SIZE } from "../../../constants/editor";
+import { useTranslateParams } from "../../../hooks/useTranslateParams";
 import { ChapterListItem } from "../../../components/shelf/ChapterListItem";
 import { BookEditModal } from "../../../components/common/BookEditModal";
 import { TranslateModal } from "../../../components/common/TranslateModal";
@@ -103,33 +104,30 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
   const SCROLL_CONTAINER_ID = "app-main-scroll";
   const getScrollContainer = () => document.getElementById(SCROLL_CONTAINER_ID);
 
-  const pendingScrollY = useRef<number | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
       const savedY = window.sessionStorage.getItem(SCROLL_KEY);
-      if (savedY) {
-        pendingScrollY.current = parseInt(savedY, 10) || 0;
-        window.sessionStorage.removeItem(SCROLL_KEY);
-      }
+      if (!savedY) return;
+      const targetY = parseInt(savedY, 10) || 0;
+      window.sessionStorage.removeItem(SCROLL_KEY);
+      const forceScroll = () => {
+        const el = getScrollContainer();
+        if (!el) return;
+        let attempts = 0;
+        const tryScroll = () => {
+          el.scrollTop = targetY;
+          attempts++;
+          if (Math.abs(el.scrollTop - targetY) > 1 && attempts < 15) {
+            setTimeout(tryScroll, 40);
+          }
+        };
+        tryScroll();
+      };
+      forceScroll();
+      setTimeout(forceScroll, 80);
+      setTimeout(forceScroll, 300);
     } catch { /* ignore */ }
   }, [SCROLL_KEY]);
-
-  useEffect(() => {
-    if (loading || pendingScrollY.current === null) return;
-    const targetY = pendingScrollY.current;
-    pendingScrollY.current = null;
-    const el = getScrollContainer();
-    if (!el) return;
-    let attempts = 0;
-    const tryScroll = () => {
-      el.scrollTop = targetY;
-      attempts++;
-      if (Math.abs(el.scrollTop - targetY) > 1 && attempts < 10) {
-        requestAnimationFrame(tryScroll);
-      }
-    };
-    requestAnimationFrame(tryScroll);
-  }, [loading]);
 
   const navigateToChapter = (href: string) => {
     const el = getScrollContainer();
@@ -166,12 +164,14 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
     } catch {}
   };
 
-  const [advDetectionSize, setAdvDetectionSize] = useState<number>(DETECTION_RESOLUTION);
-  const [advInpaintingSize, setAdvInpaintingSize] = useState<number>(INPAINTING_SIZE);
-  const [advDetector, setAdvDetector] = useState<string>("default");
-  const [advTranslator, setAdvTranslator] = useState<string>("deepseek");
-  const [advOcrMode, setAdvOcrMode] = useState<string>("auto");
-  const [advInpainter, setAdvInpainter] = useState<string>("lama_mpe");
+  const {
+    detectionResolution: advDetectionSize, setDetectionResolution: setAdvDetectionSize,
+    inpaintingSize: advInpaintingSize, setInpaintingSize: setAdvInpaintingSize,
+    textDetector: advDetector, setTextDetector: setAdvDetector,
+    translator: advTranslator, setTranslator: setAdvTranslator,
+    ocrMode: advOcrMode, setOcrMode: setAdvOcrMode,
+    inpainter: advInpainter, setInpainter: setAdvInpainter,
+  } = useTranslateParams();
 
   const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
   const [settingsFocusExtId, setSettingsFocusExtId] = useState<string>("");
@@ -729,7 +729,6 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
   const startEditorPrepareFromChapter = async () => {
     if (translateLoading) return;
     if (isQuick) return;
-    if (chapterFilter !== "raw") return;
     if (translateTargets.length === 0) return;
     if (translateTargets.length > 1) return;
 
@@ -789,7 +788,7 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
         try {
           const base = res.cleanImage || res.translatedImage;
           const blob = await resolveImageToBlob(base);
-          translatedBlobKey = await putBlob(blob, { dir: `${bookId}/${selected.id}` });
+          translatedBlobKey = await putBlob(blob, { dir: `${bookId}/_editorwork`, name: f.name });
         } catch {
           translatedUrl = res.cleanImage || res.translatedImage;
         }
@@ -829,7 +828,6 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
   const startTranslateSelected = async () => {
     if (translateLoading) return;
     if (isQuick) return;
-    if (chapterFilter !== "raw") return;
     if (translateTargets.length === 0) return;
 
     if (!isApiKeyConfigured(advTranslator)) {
@@ -841,14 +839,30 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
 
     setTranslateLoading(true);
     setTranslateError("");
+
+    try { window.localStorage.setItem(STORAGE_KEY_LAST_LANG, translateTargetLang); } catch {}
+
+    const selected = rawChapters.filter((c) => translateTargets.some((t) => t.id === c.id));
+    if (selected.length === 0) {
+      setTranslateError("请选择要翻译的生肉章节");
+      setTranslateLoading(false);
+      return;
+    }
+
+    setTranslateOpen(false);
+    setShowProgressModal(true);
+    setProgressError("");
+    setProgressValue(0);
+    setProgressStage("正在准备翻译…");
+    setProgressText("检测语言中");
+    clearSelection();
+
     try {
-      try { window.localStorage.setItem(STORAGE_KEY_LAST_LANG, translateTargetLang); } catch {}
-
-      const selected = rawChapters.filter((c) => translateTargets.some((t) => t.id === c.id));
-      if (selected.length === 0) throw new Error("请选择要翻译的生肉章节");
-
       const createdJobIds: string[] = [];
-      for (const raw of selected) {
+      for (let ri = 0; ri < selected.length; ri++) {
+        const raw = selected[ri];
+        setProgressText(`正在准备 (${ri + 1}/${selected.length})`);
+
         const files: File[] = [];
         for (const p of raw.pages || []) {
           const blob = await getBlob(p.originalBlobKey);
@@ -886,16 +900,13 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
       if (createdJobIds.length === 0) throw new Error("未找到可翻译的图片（可能已被删除）");
 
       setTranslateJobIds(createdJobIds);
-      setTranslateOpen(false);
-      setShowProgressModal(true);
-      setProgressError("");
       setProgressValue(0);
       setProgressText(`0/${createdJobIds.reduce((s, id) => s + (jobById.get(id)?.total || 0), 0) || "-"}`);
       setProgressStage("翻译中");
-      clearSelection();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err ?? "Failed");
-      setTranslateError(message);
+      setProgressError(message);
+      setProgressStage("失败");
     } finally {
       setTranslateLoading(false);
     }
@@ -1380,7 +1391,7 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
                         onOpenFolder={window.mts ? () => {
                           const chapter = book?.chapters.find((c) => c.id === it.id);
                           if (!chapter) return;
-                          void openChapterFolder(bookId, chapter.id, chapter.pages);
+                          void openChapterFolder(bookId, chapter.id);
                         } : undefined}
                         onRename={async () => {
                           const newTitle = await prompt({ title: "重命名章节", defaultValue: it.title, placeholder: "请输入新名称" });
@@ -1442,7 +1453,7 @@ export default function ShelfBookPage(props: { params: Promise<{ bookId: string 
                           setTranslateOpen(true);
                         } : undefined}
                         onOpenFolder={window.mts ? () => {
-                          void openChapterFolder(bookId, ch.id, ch.pages);
+                          void openChapterFolder(bookId, ch.id);
                         } : undefined}
                         onRename={async () => {
                           const newTitle = await prompt({ title: "重命名章节", defaultValue: ch.title, placeholder: "请输入新名称" });

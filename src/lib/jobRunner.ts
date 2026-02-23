@@ -84,19 +84,18 @@ export async function runBatchJob(jobId: string, files: File[]) {
         });
       } catch (scanErr: unknown) {
         if (isMissingApiKeyError(scanErr)) {
-          throw new Error("API Key 缺失或无效，请在设置 → 账号中检查配置或额度");
+          const providerLabel = scanErr.provider && scanErr.provider !== "unknown" ? `【${scanErr.provider}】` : "";
+          throw new Error(`${providerLabel}API Key 未配置或已失效，请在设置 → 账号中检查 Key 是否正确及余额是否充足`);
         }
         throw scanErr;
       }
-
-      const originalKey = await putBlob(f, { dir: blobDir, name: f.name });
 
       let translatedBlobKey: string | undefined;
       let translatedUrl: string | undefined;
 
       try {
         const blob = await resolveImageToBlob(scan.translatedImage);
-        translatedBlobKey = await putBlob(blob, { dir: blobDir });
+        translatedBlobKey = await putBlob(blob, { dir: blobDir, name: f.name });
       } catch {
         translatedUrl = scan.translatedImage;
       }
@@ -107,12 +106,12 @@ export async function runBatchJob(jobId: string, files: File[]) {
         createdAt: Date.now(),
         imageSize: scan.imageSize,
         regions: scan.regions,
-        originalBlobKey: originalKey,
+        originalBlobKey: "",
         translatedBlobKey,
         translatedUrl,
       });
 
-      setJobItem(jobId, i, { status: "success", originalBlobKey: originalKey });
+      setJobItem(jobId, i, { status: "success" });
       setJobProgress(jobId, { completed: i + 1 });
     }
 

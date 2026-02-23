@@ -7,6 +7,7 @@ import { AccountTab } from "./settings/AccountTab";
 import { GeneralTab } from "./settings/GeneralTab";
 import { ExtensionsTab } from "./settings/ExtensionsTab";
 import { AboutTab } from "./settings/AboutTab";
+import { FontsTab } from "./settings/FontsTab";
 import { useTitleBarOverlay } from "../hooks/useTitleBarOverlay";
 import { TITLE_BAR_OVERLAY_TRANSPARENT, TITLE_BAR_SYMBOL_COLOR_MUTED } from "../constants/window";
 
@@ -50,13 +51,25 @@ export function SettingsModal(props: { open: boolean; onClose: () => void; initi
       case "general":
         return <GeneralTab />;
       case "fonts":
-        return <div className="text-xs font-black text-black/60">该功能暂未开放</div>;
+        return (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <Type className="w-10 h-10 mb-3 opacity-30" />
+            <p className="text-sm font-bold">开发中，敬请期待</p>
+            <p className="text-xs mt-1">字体管理功能正在开发中，将在后续版本推出</p>
+          </div>
+        );
       case "extensions":
         return <ExtensionsTab open={open && activeTab === "extensions"} focusExtensionId={props.focusExtensionId} />;
       case "about":
         return <AboutTab />;
       default:
-        return <div className="text-xs font-black text-black/60">该功能暂未开放</div>;
+        return (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <Keyboard className="w-10 h-10 mb-3 opacity-30" />
+            <p className="text-sm font-bold">开发中，敬请期待</p>
+            <p className="text-xs mt-1">该功能正在开发中，将在后续版本推出</p>
+          </div>
+        );
     }
   }, [activeTab, open, props.focusExtensionId]);
 

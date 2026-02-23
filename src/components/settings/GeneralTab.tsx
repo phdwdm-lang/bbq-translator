@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FolderOpen, RotateCcw } from "lucide-react";
+import { FolderOpen, RotateCcw, FileDown } from "lucide-react";
+import { getBackendUrl } from "../../lib/env";
 import { collectAllReferencedBlobKeys, getLocalStorageUsage } from "../../lib/storage";
 import { cleanOrphanBlobs, listAllBlobKeys } from "../../lib/blobDb";
 
@@ -65,10 +66,47 @@ function useStoragePath() {
   return { storagePath, isCustom, pathLoading, selectFolder, resetDefault, openFolder };
 }
 
+function useExportLogs() {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportDone, setExportDone] = useState(false);
+
+  const exportLogs = async () => {
+    setExporting(true);
+    setExportError("");
+    setExportDone(false);
+    try {
+      const res = await fetch(`${getBackendUrl()}/export_logs`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch?.[1] || `bbq-diagnostic-${Date.now()}.json`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setExportDone(true);
+    } catch (err: unknown) {
+      setExportError(err instanceof Error ? err.message : String(err ?? "Failed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return { exporting, exportError, exportDone, exportLogs };
+}
+
 export function GeneralTab() {
   const [storageCleaning, setStorageCleaning] = useState(false);
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [storageError, setStorageError] = useState("");
+  const { exporting, exportError, exportDone, exportLogs } = useExportLogs();
 
   const { storagePath, isCustom, pathLoading, selectFolder, resetDefault, openFolder } = useStoragePath();
 
@@ -214,6 +252,27 @@ export function GeneralTab() {
             清理孤儿数据
           </button>
         </div>
+      </div>
+
+      {/* Export Diagnostic Logs */}
+      <div className="space-y-3">
+        <div>
+          <div className="text-sm font-bold text-slate-800">诊断日志</div>
+          <div className="text-xs text-slate-500 mt-1">导出后端运行日志与系统环境信息，方便反馈问题时附带</div>
+        </div>
+
+        {exportError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600">{exportError}</div>}
+        {exportDone && <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-600">日志已导出，请在下载目录查看</div>}
+
+        <button
+          type="button"
+          className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          disabled={exporting}
+          onClick={() => void exportLogs()}
+        >
+          <FileDown className="w-3.5 h-3.5" />
+          {exporting ? "导出中..." : "导出诊断日志"}
+        </button>
       </div>
     </div>
   );

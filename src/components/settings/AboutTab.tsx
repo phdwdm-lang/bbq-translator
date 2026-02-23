@@ -16,7 +16,7 @@ export function AboutTab() {
           </div>
         </div>
         <p className="text-xs text-slate-500 leading-relaxed">
-          上传生肉漫画，自动去字、翻译、嵌字，为您端上热腾腾的熟肉。开箱即用，无需 Python / GPU。
+          上传生肉漫画，自动去字、翻译、嵌字，为您端上热腾腾的熟肉。开箱即用。
         </p>
       </div>
 

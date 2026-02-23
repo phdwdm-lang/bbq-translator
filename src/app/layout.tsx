@@ -3,8 +3,8 @@ import "./globals.css";
 import { ClientProviders } from "../components/common/ClientProviders";
 
 export const metadata: Metadata = {
-  title: "Manga Translator",
-  description: "Black-and-white manga style UI for manga translation",
+  title: "BBQ Translator",
+  description: "BBQ Translator — 一键将生肉漫画翻译为熟肉",
 };
 
 export default function RootLayout({

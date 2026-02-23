@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Download, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download, Save, Loader2, PanelRight } from "lucide-react";
 import { IS_ELECTRON } from "../../lib/env";
 
 interface EditorHeaderProps {
@@ -18,6 +18,8 @@ interface EditorHeaderProps {
   onRenderPreview: () => void;
   onDownload: () => void;
   onSave: () => void;
+  rightPanelCollapsed?: boolean;
+  onToggleRightPanel?: () => void;
 }
 
 export function EditorHeader({
@@ -37,6 +39,8 @@ export function EditorHeader({
   onRenderPreview,
   onDownload,
   onSave,
+  rightPanelCollapsed,
+  onToggleRightPanel,
 }: EditorHeaderProps) {
   const hasPrev = pageIndex > 0;
   const hasNext = pageIndex < totalPages - 1;
@@ -146,6 +150,23 @@ export function EditorHeader({
           >
             <Download className="w-4 h-4" /> 导出图片
           </button>
+        )}
+        {onToggleRightPanel && (
+          <>
+            <div className="h-6 w-px bg-slate-200" />
+            <button
+              type="button"
+              onClick={onToggleRightPanel}
+              title={rightPanelCollapsed ? "展开属性面板" : "收起属性面板"}
+              className={`p-2 rounded-lg transition-colors border ${
+                rightPanelCollapsed
+                  ? "bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200"
+                  : "bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100"
+              }`}
+            >
+              <PanelRight className="w-4 h-4" />
+            </button>
+          </>
         )}
       </div>
     </header>

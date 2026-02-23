@@ -5,10 +5,14 @@ import Link from "next/link";
 import { ChevronRight, Bell, Search } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { BackendStatusBar } from "../common/BackendStatusBar";
+import { BackendLoadingScreen } from "../common/BackendLoadingScreen";
+import { useBackendStatus } from "../../hooks/useBackendStatus";
+import { IS_ELECTRON } from "../../lib/env";
 import { isMigrationNeeded, migrateBackendResultsToLocal } from "../../lib/migrateBackendResults";
 import { isBlobFsMigrationNeeded, migrateBlobsToFileSystem } from "../../lib/migrateBlobsToFs";
 import { notifyMitChange } from "../../lib/storage";
 import { useDesktopStorageInit } from "../../hooks/useDesktopStorageInit";
+import { useSidebarCollapse } from "../../hooks/useSidebarCollapse";
 import { useDialog } from "../common/DialogProvider";
 
 export interface BreadcrumbItem {
@@ -27,7 +31,9 @@ interface AppShellProps {
 
 export function AppShell({ title, backHref, breadcrumbs, headerActions, children, onOpenSettings }: AppShellProps) {
   const storageReady = useDesktopStorageInit();
+  const { collapsed, toggle: toggleSidebar } = useSidebarCollapse();
   const { alert } = useDialog();
+  const { status: backendStatus, restart: restartBackend } = useBackendStatus();
 
   const migrationRan = useRef(false);
   useEffect(() => {
@@ -59,7 +65,7 @@ export function AppShell({ title, backHref, breadcrumbs, headerActions, children
 
   return (
     <div className="h-screen w-full flex overflow-hidden bg-slate-50">
-      <Sidebar onOpenSettings={onOpenSettings} />
+      <Sidebar onOpenSettings={onOpenSettings} collapsed={collapsed} onToggleCollapse={toggleSidebar} />
 
       <div className="flex-1 flex flex-col min-w-0 relative overflow-hidden">
         <header className="h-12 app-drag-region border-b border-slate-200/60 bg-white/80 backdrop-blur flex items-center justify-between pl-8 pr-[140px] sticky top-0 z-10">
@@ -91,7 +97,8 @@ export function AppShell({ title, backHref, breadcrumbs, headerActions, children
           </div>
         </header>
 
-        <BackendStatusBar />
+        <BackendStatusBar status={backendStatus} restart={restartBackend} />
+        {IS_ELECTRON && backendStatus === "starting" && <BackendLoadingScreen />}
 
         <main id="app-main-scroll" className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="p-8">

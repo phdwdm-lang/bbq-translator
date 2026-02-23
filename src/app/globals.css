@@ -51,10 +51,28 @@ body {
 .view-section { animation: fadeIn 0.3s ease-in-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
+/* ── Mascot Float Animation ── */
+@keyframes float {
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-6px); }
+  100% { transform: translateY(0px); }
+}
+.animate-float { animation: float 6s ease-in-out infinite; }
+.group:hover .float-on-hover { animation: float 6s ease-in-out infinite; }
+.float-on-hover { animation: none; }
+
 /* ── Loading Spinner ── */
 .loading-spin { animation: spin 3s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .animate-spin-slow { animation: spin 3s linear infinite; }
+
+/* ── Backend Loading Bar ── */
+@keyframes loadingBar {
+  0%   { width: 0%; margin-left: 0%; }
+  50%  { width: 60%; margin-left: 20%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+.animate-loading-bar { animation: loadingBar 2s ease-in-out infinite; }
 
 /* ── Range Slider ── */
 .range-slider {

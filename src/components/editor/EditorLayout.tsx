@@ -5,9 +5,11 @@ interface EditorLayoutProps {
   middle: ReactNode;
   right: ReactNode;
   header: ReactNode;
+  rightCollapsed?: boolean;
+  onToggleRight?: () => void;
 }
 
-export function EditorLayout({ left, middle, right, header }: EditorLayoutProps) {
+export function EditorLayout({ left, middle, right, header, rightCollapsed, onToggleRight }: EditorLayoutProps) {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100">
       <div className="h-14 flex-none border-b border-slate-200 bg-white z-20">
@@ -20,8 +22,8 @@ export function EditorLayout({ left, middle, right, header }: EditorLayoutProps)
         <div className="flex-1 relative bg-[#e5e5e5] overflow-hidden">
           {middle}
         </div>
-        <div className="w-80 flex-none border-l border-slate-200 bg-white flex flex-col z-10 shrink-0 overflow-hidden">
-          {right}
+        <div className={`${rightCollapsed ? "w-0" : "w-80"} flex-none border-l border-slate-200 bg-white flex flex-col z-10 shrink-0 overflow-hidden transition-all duration-200`}>
+          {!rightCollapsed && right}
         </div>
       </div>
     </div>

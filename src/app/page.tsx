@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Upload, HelpCircle, FileImage, Settings as SettingsIcon, Image as ImageIcon, CheckCircle2 } from "lucide-react";
+import { ChevronRight, Upload, Image as ImageIcon, CheckCircle2 } from "lucide-react";
 import { AppShell } from "../components/layout/AppShell";
 
 import { importToImages, makeTaskFolderName } from "../lib/importExtract";
@@ -43,6 +43,7 @@ import {
   TRANSLATION_STAGE_TRANSLATING,
 } from "../lib/translationProgress";
 import { DETECTION_RESOLUTION, INPAINTING_SIZE } from "../constants/editor";
+import { useTranslateParams } from "../hooks/useTranslateParams";
 import type { ElectronMts } from "../types/electron";
 
 export default function Home() {
@@ -103,7 +104,7 @@ export default function Home() {
         try {
           const base = res.cleanImage || res.translatedImage;
           const blob = await resolveImageToBlob(base);
-          translatedBlobKey = await putBlob(blob, { dir: `${QUICK_BOOK_ID}/_workspace` });
+          translatedBlobKey = await putBlob(blob, { dir: `${QUICK_BOOK_ID}/_workspace`, name: f.name });
         } catch {
           translatedUrl = res.cleanImage || res.translatedImage;
         }
@@ -190,12 +191,14 @@ export default function Home() {
     } catch {}
   };
 
-  const [advDetectionSize, setAdvDetectionSize] = useState<number>(DETECTION_RESOLUTION);
-  const [advInpaintingSize, setAdvInpaintingSize] = useState<number>(INPAINTING_SIZE);
-  const [advDetector, setAdvDetector] = useState<string>("default");
-  const [advTranslator, setAdvTranslator] = useState<string>("deepseek");
-  const [advOcrMode, setAdvOcrMode] = useState<string>("auto");
-  const [advInpainter, setAdvInpainter] = useState<string>("lama_mpe");
+  const {
+    detectionResolution: advDetectionSize, setDetectionResolution: setAdvDetectionSize,
+    inpaintingSize: advInpaintingSize, setInpaintingSize: setAdvInpaintingSize,
+    textDetector: advDetector, setTextDetector: setAdvDetector,
+    translator: advTranslator, setTranslator: setAdvTranslator,
+    ocrMode: advOcrMode, setOcrMode: setAdvOcrMode,
+    inpainter: advInpainter, setInpainter: setAdvInpainter,
+  } = useTranslateParams();
 
   const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
 
@@ -859,30 +862,7 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ── FAQ Section ── */}
-          <section className="border-t border-slate-200 pt-8">
-            <h3 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-wider">猜你想问</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <a href="#" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-sm transition-all group">
-                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                  <HelpCircle className="w-4 h-4" />
-                </div>
-                <span className="text-sm font-medium text-slate-700 group-hover:text-indigo-700">如何批量翻译多漫画章节？</span>
-              </a>
-              <a href="#" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-sm transition-all group">
-                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                  <FileImage className="w-4 h-4" />
-                </div>
-                <span className="text-sm font-medium text-slate-700 group-hover:text-indigo-700">支持哪些图片格式？</span>
-              </a>
-              <a href="#" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-sm transition-all group">
-                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                  <SettingsIcon className="w-4 h-4" />
-                </div>
-                <span className="text-sm font-medium text-slate-700 group-hover:text-indigo-700">如何调整自动翻译的语言？</span>
-              </a>
-            </div>
-          </section>
+          {/* FAQ Section hidden — content not yet implemented */}
         </div>
       </AppShell>
 
@@ -968,7 +948,6 @@ export default function Home() {
         totalCount={modalTask?.totalCount ?? 0}
         onCancel={cancelProgress}
         onClose={() => closeAndCleanupTask(tp.modalTaskId)}
-        onBackground={() => setTranslationModalOpen(false)}
       />
     </>
   );

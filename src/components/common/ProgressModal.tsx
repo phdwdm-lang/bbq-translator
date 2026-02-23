@@ -17,7 +17,6 @@ interface ProgressModalProps {
   totalCount?: number;
   onCancel: () => void;
   onClose: () => void;
-  onBackground?: () => void;
 }
 
 type ResultStatus = "all_success" | "partial_success" | "all_failed";
@@ -41,7 +40,6 @@ export function ProgressModal({
   totalCount = 0,
   onCancel,
   onClose,
-  onBackground,
 }: ProgressModalProps) {
   if (!open) return null;
 
@@ -118,19 +116,16 @@ export function ProgressModal({
         )}
 
         <div className="mt-6 flex items-center justify-between gap-3">
-          <button type="button" className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" onClick={onCancel}>
-            取消
-          </button>
-          <div className="flex items-center gap-2">
-            {!isFinished && onBackground && (
-              <button type="button" className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" onClick={onBackground}>
-                后台继续
-              </button>
-            )}
-            <button type="button" className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors" onClick={onClose}>
-              {isFinished ? "关闭" : "关闭"}
+          {isFinished ? (
+            <div className="flex-1" />
+          ) : (
+            <button type="button" className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" onClick={onCancel}>
+              取消
             </button>
-          </div>
+          )}
+          <button type="button" className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors" onClick={onClose}>
+            {isFinished ? "关闭" : "后台继续"}
+          </button>
         </div>
       </div>
     </div>

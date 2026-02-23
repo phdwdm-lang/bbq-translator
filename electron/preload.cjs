@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld("mts", {
     ipcRenderer.invoke("save-file-dialog", options),
   getAppPaths: async () => ipcRenderer.invoke("get-app-paths"),
   restartBackend: async () => ipcRenderer.invoke("restart-backend"),
+  relaunchApp: async () => ipcRenderer.invoke("relaunch-app"),
   openExternal: async (url) => ipcRenderer.invoke("open-external", { url }),
   openPath: async (targetPath) => ipcRenderer.invoke("open-path", { path: targetPath }),
   showItemInFolder: async (filePath) => ipcRenderer.invoke("show-item-in-folder", { path: filePath }),

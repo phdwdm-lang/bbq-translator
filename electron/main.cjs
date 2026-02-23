@@ -174,6 +174,7 @@ let backendPort = BACKEND_PORT_START;
 let intentionalStop = false;
 let autoRestartCount = 0;
 let lastCrashTime = 0;
+let backendStartTime = 0;
 
 function isPortAvailable(port) {
   return new Promise((resolve) => {
@@ -276,8 +277,13 @@ async function startBackend() {
     if (line) console.error(`[backend] ${line}`);
   });
 
+  backendStartTime = Date.now();
+
   backendProcess.on("exit", (code, signal) => {
-    console.log(`[electron] Backend exited: code=${code} signal=${signal}`);
+    const uptimeSec = backendStartTime ? ((Date.now() - backendStartTime) / 1000).toFixed(1) : "unknown";
+    console.log(
+      `[electron] Backend exited: code=${code} signal=${signal} intentional=${intentionalStop} uptime=${uptimeSec}s`
+    );
     backendProcess = null;
     notifyRendererBackendStatus("stopped");
 
@@ -476,6 +482,11 @@ ipcMain.handle("get-backend-url", async () => ({
   port: backendPort,
   host: BACKEND_HOST,
 }));
+
+ipcMain.handle("relaunch-app", async () => {
+  app.relaunch();
+  app.exit(0);
+});
 
 ipcMain.handle("restart-backend", async () => {
   try {
@@ -775,15 +786,23 @@ async function startFrontendServer() {
     return false;
   }
 
+  const {
+    HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy,
+    ALL_PROXY, all_proxy,
+    ...safeEnv
+  } = process.env;
+
   frontendProcess = spawn(process.execPath, [serverJs], {
     cwd: standaloneDir,
     stdio: ["ignore", "pipe", "pipe"],
     env: {
-      ...process.env,
+      ...safeEnv,
       ELECTRON_RUN_AS_NODE: "1",
       PORT: String(frontendPort),
       HOSTNAME: "127.0.0.1",
       NODE_ENV: "production",
+      NO_PROXY: "*",
+      no_proxy: "*",
     },
   });
 
@@ -862,6 +881,22 @@ const createWindow = async () => {
       defaultEncoding: "utf-8",
       preload: path.join(__dirname, "preload.cjs"),
     },
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    console.log("[electron] blocked new-window attempt:", url);
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      shell.openExternal(url).catch(() => {});
+    }
+    return { action: "deny" };
+  });
+
+  win.webContents.on("will-navigate", (event, url) => {
+    const allowed = url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
+    if (!allowed) {
+      event.preventDefault();
+      console.warn("[electron] blocked navigation to:", url);
+    }
   });
 
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {

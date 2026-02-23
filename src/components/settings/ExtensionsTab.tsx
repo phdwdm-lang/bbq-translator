@@ -72,8 +72,14 @@ export function ExtensionsTab({ open, focusExtensionId }: ExtensionsTabProps) {
 
   useEffect(() => {
     if (!open || !hasActiveTask) return;
-    const t = window.setInterval(() => void refreshExtensions(), 1500);
-    return () => window.clearInterval(t);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await refreshExtensions();
+      if (!cancelled) timer = setTimeout(poll, 1500);
+    };
+    timer = setTimeout(poll, 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [open, hasActiveTask]);
 
   useEffect(() => {
@@ -92,7 +98,7 @@ export function ExtensionsTab({ open, focusExtensionId }: ExtensionsTabProps) {
     setImportError("");
     if (fileInputRef.current) {
       if (id === "cuda") {
-        fileInputRef.current.accept = ".whl";
+        fileInputRef.current.accept = ".whl,.zip,.001,.002,.003,.004,.005";
         fileInputRef.current.multiple = true;
       } else {
         fileInputRef.current.accept = ".zip";
@@ -118,7 +124,9 @@ export function ExtensionsTab({ open, focusExtensionId }: ExtensionsTabProps) {
 
   const doRestart = async () => {
     try {
-      if (typeof window !== "undefined" && window.mts?.restartBackend) {
+      if (typeof window !== "undefined" && window.mts?.relaunchApp) {
+        await window.mts.relaunchApp();
+      } else if (typeof window !== "undefined" && window.mts?.restartBackend) {
         await window.mts.restartBackend();
       } else {
         await restartBackend();
@@ -183,9 +191,11 @@ export function ExtensionsTab({ open, focusExtensionId }: ExtensionsTabProps) {
             try {
               if (id === "cuda") {
                 const files = selectedFiles;
-                const invalidFiles = files.filter((f) => !f.name.toLowerCase().endsWith(".whl"));
-                if (invalidFiles.length > 0) {
-                  throw new Error(`仅支持 .whl 文件，以下文件格式不正确：${invalidFiles.map((f) => f.name).join("、")}`);
+                const isSingleZip = files.length === 1 && files[0].name.toLowerCase().endsWith(".zip");
+                const isAllWhl = files.every((f) => f.name.toLowerCase().endsWith(".whl"));
+                const isSplitZip = files.length > 1 && files.every((f) => /\.zip\.\d{3}$/i.test(f.name));
+                if (!isSingleZip && !isAllWhl && !isSplitZip) {
+                  throw new Error("CUDA 扩展支持上传单个 .zip 压缩包、多个 .whl 文件或分卷 .zip 文件（.zip.001, .zip.002）");
                 }
                 await importExtensionWhl({ id, files });
               } else {
@@ -249,16 +259,6 @@ export function ExtensionsTab({ open, focusExtensionId }: ExtensionsTabProps) {
                 <div className="shrink-0 flex items-center gap-2">
                   {!ext.installed && !working && (
                     <>
-                      {ext.download_state !== "unsupported" && (
-                        <button
-                          type="button"
-                          className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50"
-                          onClick={() => void doInstall(ext.id)}
-                          disabled={busy}
-                        >
-                          在线下载
-                        </button>
-                      )}
                       <button
                         type="button"
                         className="px-3 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-50"

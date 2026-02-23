@@ -345,6 +345,8 @@ export default function ChapterDetailPage(props: { params: Promise<{ bookId: str
             viewerIndex={viewerIndex ?? 0}
             zoom={zoom}
             onPageChange={setViewerIndex}
+            onPrev={goToPrevPage}
+            onNext={goToNextPage}
             onToggleToolbar={toggleToolbar}
             onScrollProgress={handleScrollProgress}
             endSlot={

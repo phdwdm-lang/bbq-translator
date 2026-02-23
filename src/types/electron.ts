@@ -33,6 +33,7 @@ export interface ElectronMts {
     logsDir: string;
   }>;
   restartBackend: () => Promise<{ ok: boolean }>;
+  relaunchApp: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   openPath: (targetPath: string) => Promise<void>;
   showItemInFolder: (filePath: string) => Promise<void>;

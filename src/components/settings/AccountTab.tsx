@@ -21,6 +21,26 @@ const VERIFY_STATE_SUCCESS = "success";
 const VERIFY_STATE_ERROR = "error";
 const VERIFY_MESSAGE_API_KEY_REQUIRED = "请先填写 API Key";
 const VERIFY_MESSAGE_FAILED = "验证失败";
+
+function resolveVerifyErrorMessage(raw: string): string {
+  if (!raw) return VERIFY_MESSAGE_FAILED;
+  const codeMatch = /Error code:\s*(\d+)/i.exec(raw);
+  const statusCode = codeMatch ? parseInt(codeMatch[1], 10) : null;
+  const msgMatch =
+    /'message':\s*'([^']+)'/i.exec(raw) ||
+    /"message":\s*"([^"]+)"/i.exec(raw);
+  const innerMsg = msgMatch?.[1];
+  if (statusCode === 401 || statusCode === 403) {
+    return innerMsg ? `API Key 无效：${innerMsg}` : "API Key 无效，请检查 Key 是否正确及是否有效";
+  }
+  if (statusCode === 429) {
+    return "请求超限（429），请检查余额是否充足或稍后重试";
+  }
+  if (statusCode && innerMsg) return `请求失败（${statusCode}）：${innerMsg}`;
+  if (innerMsg) return innerMsg;
+  if (raw.length <= 120) return raw;
+  return "验证失败，请检查 API Key 是否正确";
+}
 const API_KEY_VISIBILITY_LABEL_SHOW = "显示 API Key";
 const API_KEY_VISIBILITY_LABEL_HIDE = "隐藏 API Key";
 const VISIBILITY_ICON_SIZE = 16;
@@ -192,10 +212,10 @@ function useCredentialVerification(config: TranslatorCredentialConfig, values: R
         model,
       });
       setVerifyState(result.valid ? VERIFY_STATE_SUCCESS : VERIFY_STATE_ERROR);
-      setVerifyMessage(result.message);
+      setVerifyMessage(result.valid ? (result.message || "验证成功") : resolveVerifyErrorMessage(result.message));
     } catch (err) {
       setVerifyState(VERIFY_STATE_ERROR);
-      setVerifyMessage(err instanceof Error ? err.message : VERIFY_MESSAGE_FAILED);
+      setVerifyMessage(resolveVerifyErrorMessage(err instanceof Error ? err.message : VERIFY_MESSAGE_FAILED));
     }
   }, [config, values]);
 

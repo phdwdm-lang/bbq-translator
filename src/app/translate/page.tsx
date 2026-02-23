@@ -14,7 +14,7 @@ import {
   closeAndCleanupTask,
   setTranslationModalOpen,
 } from "../../lib/translationProgress";
-import { deleteBlob, getBlob, putBlob } from "../../lib/blobDb";
+import { deleteBlob, getBlob, listAllBlobKeys, putBlob } from "../../lib/blobDb";
 import { addPageToChapter, createChapter, clearEditorWorkspace, getAllBlobKeysFromChapter, getWorkspaceBlobKeys, loadEditorWorkspace, loadLibrary, QUICK_BOOK_ID, removeChapters, updatePageInChapter, updatePageInWorkspace, type MangaPage, type TextRegion } from "../../lib/storage";
 
 import { CustomSelect } from "../../components/common/CustomSelect";
@@ -25,6 +25,7 @@ import { EditorPanelRight } from "../../components/editor/EditorPanelRight";
 import type { EditorRegion, DrawingRect } from "../../types/editor";
 import { useTranslateParams } from "../../hooks/useTranslateParams";
 import { useEditorState } from "../../hooks/useEditorState";
+import { useEditorPanelCollapse } from "../../hooks/useEditorPanelCollapse";
 import { useFileImport } from "../../hooks/useFileImport";
 import { naturalCompare, getBasename, sanitizeFolderName, makeTimestampName } from "../../lib/utils";
 import { TARGET_LANGUAGE_OPTIONS } from "../../constants/languages";
@@ -33,6 +34,7 @@ import { OCR_OPTIONS, VALID_TRANSLATORS } from "../../constants/translate";
 import { useDialog } from "../../components/common/DialogProvider";
 import { resolveImageToBlob, renderMangaPage, probeLang, scanMangaImage } from "../../lib/translateClient";
 import { getBackendUrl } from "../../lib/env";
+import { setGlobalTranslating } from "../../hooks/useBackendStatus";
 import { normalizeDirection } from "../../lib/editorUtils";
 import dynamic from "next/dynamic";
 
@@ -71,6 +73,8 @@ function TranslatePageInner() {
     usedOcr, setUsedOcr,
     inputRef, abortRef,
   } = useFileImport();
+
+  const { collapsed: editorPanelCollapsed, toggle: toggleEditorPanel } = useEditorPanelCollapse();
 
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [translatedUrl, setTranslatedUrl] = useState<string | null>(null);
@@ -584,8 +588,8 @@ function TranslatePageInner() {
       }
 
       const outBlob = await resolveImageToBlob(res.image);
-      const renderDir = workspaceMode ? `${QUICK_BOOK_ID}/_workspace` : `${bookIdFromQuery}/${chapterIdFromQuery}`;
-      const renderedKey = await putBlob(outBlob, { dir: renderDir });
+      const renderDir = workspaceMode ? `${QUICK_BOOK_ID}/_workspace` : `${bookIdFromQuery}/_editorwork`;
+      const renderedKey = await putBlob(outBlob, { dir: renderDir, name: fileName });
       const renderedUrl = URL.createObjectURL(outBlob);
 
       persistPageUpdate(page.id, (p) => ({ ...p, renderedBlobKey: renderedKey, renderedUrl: undefined }));
@@ -612,6 +616,24 @@ function TranslatePageInner() {
       setEditorProjectError(message);
     }
   }, [bookIdFromQuery, chapterIdFromQuery, editorDirtyRegionIds.size, editorMode, editorPageIndex, editorPages, editorRegions, editorUseBackendPreview]);
+
+  const cleanupWorkspaceBlobs = useCallback(async () => {
+    try {
+      const [allKeys, trackedKeys] = await Promise.all([
+        listAllBlobKeys().catch(() => [] as string[]),
+        Promise.resolve(getWorkspaceBlobKeys()),
+      ]);
+      const workspacePrefix = `fblob:${QUICK_BOOK_ID}/_workspace/`;
+      const toDelete = new Set([
+        ...allKeys.filter((k) => k.startsWith(workspacePrefix)),
+        ...trackedKeys,
+      ]);
+      for (const key of toDelete) {
+        try { await deleteBlob(key); } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+    clearEditorWorkspace();
+  }, []);
 
   const saveToBookshelf = useCallback(async () => {
     if (!editorMode) return;
@@ -649,6 +671,7 @@ function TranslatePageInner() {
         setEditorSaveProgress(`渲染并保存 ${i + 1}/${total}...`);
 
         let renderedBlobKey = page.renderedBlobKey;
+        let renderedAlreadyInTarget = false;
 
         if (!renderedBlobKey) {
           if (!page.translatedBlobKey && !page.translatedUrl) {
@@ -686,7 +709,8 @@ function TranslatePageInner() {
           try {
             const res = await renderMangaPage({ file, regions: pageRegions });
             const outBlob = await resolveImageToBlob(res.image);
-            renderedBlobKey = await putBlob(outBlob, { dir: `${targetBookId}/${newChapter.id}` });
+            renderedBlobKey = await putBlob(outBlob, { dir: `${targetBookId}/${newChapter.id}`, name: fileName });
+            renderedAlreadyInTarget = true;
           } catch (err) {
             console.error(`Failed to render page ${i + 1}:`, err);
             setEditorSaveProgress(`第 ${i + 1} 页渲染失败，跳过`);
@@ -697,30 +721,16 @@ function TranslatePageInner() {
         let newOriginalBlobKey = "";
         let newTranslatedBlobKey = "";
 
-        if (workspaceMode) {
-          newOriginalBlobKey = page.originalBlobKey || "";
+        if (workspaceMode || renderedAlreadyInTarget) {
           newTranslatedBlobKey = renderedBlobKey || "";
-        } else {
-          if (page.originalBlobKey) {
-            try {
-              const blob = await getBlob(page.originalBlobKey);
-              if (blob) {
-                newOriginalBlobKey = await putBlob(blob, { dir: `${targetBookId}/${newChapter.id}`, name: page.fileName });
-              }
-            } catch {
-              newOriginalBlobKey = page.originalBlobKey;
+        } else if (renderedBlobKey) {
+          try {
+            const blob = await getBlob(renderedBlobKey);
+            if (blob) {
+              newTranslatedBlobKey = await putBlob(blob, { dir: `${targetBookId}/${newChapter.id}`, name: page.fileName });
             }
-          }
-
-          if (renderedBlobKey) {
-            try {
-              const blob = await getBlob(renderedBlobKey);
-              if (blob) {
-                newTranslatedBlobKey = await putBlob(blob, { dir: `${targetBookId}/${newChapter.id}` });
-              }
-            } catch {
-              newTranslatedBlobKey = renderedBlobKey;
-            }
+          } catch {
+            newTranslatedBlobKey = renderedBlobKey;
           }
         }
 
@@ -735,8 +745,20 @@ function TranslatePageInner() {
       }
 
       if (workspaceMode) {
-        clearEditorWorkspace();
-      } else if (bookIdFromQuery === QUICK_BOOK_ID) {
+        await cleanupWorkspaceBlobs();
+      } else {
+        try {
+          const allKeys = await listAllBlobKeys().catch(() => [] as string[]);
+          const editorworkPrefix = `fblob:${bookIdFromQuery}/_editorwork/`;
+          for (const k of allKeys) {
+            if (k.startsWith(editorworkPrefix)) {
+              try { await deleteBlob(k); } catch { /* ignore */ }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!workspaceMode && bookIdFromQuery === QUICK_BOOK_ID) {
         const removed = removeChapters(QUICK_BOOK_ID, [chapterIdFromQuery]);
         const keysToDel: string[] = [];
         for (const ch of removed) {
@@ -938,7 +960,7 @@ function TranslatePageInner() {
         const imgRes = await fetch(data.inpainted_image);
         const newBlob = await imgRes.blob();
         const inpaintDir = workspaceMode ? `${QUICK_BOOK_ID}/_workspace` : `${bookIdFromQuery}/${chapterIdFromQuery}`;
-        const newKey = await putBlob(newBlob, { dir: inpaintDir });
+        const newKey = await putBlob(newBlob, { dir: inpaintDir, name: page.fileName });
 
         const newUrl = URL.createObjectURL(newBlob);
         if (editorUrlRef.current.base?.startsWith("blob:")) {
@@ -1110,6 +1132,7 @@ function TranslatePageInner() {
     setCurrentIndex(0);
     setStatus("running");
     setError("");
+    setGlobalTranslating(true);
 
     let targetDir: DirectoryHandle;
     try {
@@ -1118,9 +1141,11 @@ function TranslatePageInner() {
       const message = err instanceof Error ? err.message : String(err ?? "Failed");
       setError(message);
       setStatus("error");
+      setGlobalTranslating(false);
       return;
     }
 
+    try {
     // 1) Probe first N images
     const N = Math.min(files.length, 6);
     const counts: Record<string, number> = {};
@@ -1221,6 +1246,9 @@ function TranslatePageInner() {
     }
 
     setStatus("done");
+    } finally {
+      setGlobalTranslating(false);
+    }
   };
 
   const cancel = () => {
@@ -1544,8 +1572,10 @@ function TranslatePageInner() {
     const handleEditorBack = async () => {
       const ok = await showConfirm({ title: "确认返回", message: "确定要返回上级页面吗？" });
       if (!ok) return;
-      // 返回前关闭进度弹窗
       setTranslationModalOpen(false);
+      if (workspaceMode) {
+        await cleanupWorkspaceBlobs();
+      }
       if (window.history.length > 1) {
         router.back();
         return;
@@ -1565,6 +1595,8 @@ function TranslatePageInner() {
 
     return (
       <EditorLayout
+        rightCollapsed={editorPanelCollapsed}
+        onToggleRight={toggleEditorPanel}
         header={
           <EditorHeader
             pageIndex={editorPageIndex}
@@ -1582,6 +1614,8 @@ function TranslatePageInner() {
             onRenderPreview={() => void applyBackendRender()}
             onDownload={handleEditorDownload}
             onSave={() => void saveToBookshelf()}
+            rightPanelCollapsed={editorPanelCollapsed}
+            onToggleRightPanel={toggleEditorPanel}
           />
         }
         left={

@@ -1,7 +1,7 @@
 "use client";
 
 import { RefreshCw, Wifi, WifiOff, AlertTriangle } from "lucide-react";
-import { useBackendStatus, type BackendStatus } from "../../hooks/useBackendStatus";
+import type { BackendStatus } from "../../hooks/useBackendStatus";
 
 const STATUS_CONFIG: Record<BackendStatus, { icon: typeof Wifi; label: string; color: string; bg: string }> = {
   connected: { icon: Wifi, label: "后端已连接", color: "text-green-600", bg: "bg-green-50" },
@@ -11,9 +11,12 @@ const STATUS_CONFIG: Record<BackendStatus, { icon: typeof Wifi; label: string; c
   restarting: { icon: RefreshCw, label: "重启中…", color: "text-blue-600", bg: "bg-blue-50" },
 };
 
-export function BackendStatusBar() {
-  const { status, restart } = useBackendStatus();
+interface BackendStatusBarProps {
+  status: BackendStatus;
+  restart: () => Promise<void>;
+}
 
+export function BackendStatusBar({ status, restart }: BackendStatusBarProps) {
   if (status === "connected") return null;
 
   const cfg = STATUS_CONFIG[status];
