@@ -35,7 +35,7 @@
 
 ## 📦 安装使用（终端用户）
 
-从 [Releases](https://github.com/phdwdm-lang/bbq-translator/releases) 下载最新的 `.exe` 安装包，双击安装，开箱即用。
+从 [Releases](https://github.com/phdwdm-lang/bbq-translator/releases) 下载最新的 `.exe` 压缩包，解压即用（首次开启导入环境需要一点时间）。
 
 **最低硬件要求**：
 - Windows 10 / 11 (64-bit)
