@@ -1,6 +1,12 @@
+<img width="1376" height="768" alt="000" src="https://github.com/user-attachments/assets/7ef61402-66fc-47c5-9acd-6ec34461a6e7" />
 # BBQ翻译 (Borderless Books Quickly)
 
 > 生肉变熟肉，无界，快速。一款面向 Windows 桌面的漫画 AI 翻译工具，开箱即用，无需配置 Python 或独立显卡。项目后端基于manga-image-translator开发。
+
+---
+
+## 📸 翻译效果
+<img width="2487" height="1896" alt="007" src="https://github.com/user-attachments/assets/3e843c44-ffa6-4cea-82ea-fb759062ec85" />
 
 ---
 
@@ -39,6 +45,7 @@
 ### 🧩 扩展包（可选）
 
 主程序已内置基础模型，开箱即用。以下扩展包可按需安装以增强效果或加速推理。
+<img width="1800" height="1167" alt="003" src="https://github.com/user-attachments/assets/1578f9d3-30f1-4938-86ca-fe33c5e1b220" />
 
 **通用导入方式**：打开 BBQ翻译 → ⚙️ 设置 → 拓展 → 找到对应扩展 → 点击「离线导入」→ 选择下载的文件 → 等待完成。
 
