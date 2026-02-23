@@ -1,6 +1,6 @@
 # BBQ翻译 (Borderless Books Quickly)
 
-> 生肉变熟肉，无界，快速。一款面向 Windows 桌面的漫画 AI 翻译工具，开箱即用，无需配置 Python 或独立显卡。
+> 生肉变熟肉，无界，快速。一款面向 Windows 桌面的漫画 AI 翻译工具，开箱即用，无需配置 Python 或独立显卡。项目后端基于manga-image-translator开发。
 
 ---
 
